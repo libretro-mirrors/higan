@@ -37,6 +37,17 @@ else
   $(error "unsupported platform")
 endif
 
+ifeq ($(target),libretro)
+  ifneq ($(platform),windows)
+    flags += -fPIC
+  endif
+  ifneq ($(target),macosx)
+    link += -shared
+  else
+    link += -dynamiclib
+  endif
+endif
+
 compile = \
   $(strip \
     $(if $(filter %.c,$<), \
