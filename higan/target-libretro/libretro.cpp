@@ -41,20 +41,6 @@ static string locate(string name)
 	return { Path::local(), "higan/", name };
 }
 
-static string locate_write_save(string name)
-{
-	// Try libretro specific paths first ...
-	const char *save = nullptr;
-	if (environ_cb && environ_cb(RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY, &save) && save)
-	{
-		directory::create({ save, "/higan/" });
-		if (inode::exists({ save, "/higan/" }))
-			return { save, "/higan/", name };
-	}
-
-	return locate(name);
-}
-
 struct Program : Emulator::Platform
 {
 	Program();
@@ -119,20 +105,21 @@ vfs::shared::file Program::open(uint id, string name, vfs::file::mode mode, bool
 	if (name == "program.rom")
 		return vfs::memory::file::open(game_data, game_size);
 
-	string path;
-	if (id == SuperFamicom::ID::System)
-		path = { medium_paths(SuperFamicom::ID::System), name };
-	else
-		path = locate(name);
+	string p = locate(name);
+	if (!inode::exists(p))
+	{
+		libretro_print(RETRO_LOG_INFO, "%s does not exist, trying another path.\n", static_cast<const char *>(p));
+		p = { path(id), name };
+	}
 
 	// Something else, load it from disk.
-	libretro_print(RETRO_LOG_INFO, "Trying to access file %s.\n", static_cast<const char *>(path));
-	if (auto result = vfs::fs::file::open(path, mode))
+	libretro_print(RETRO_LOG_INFO, "Trying to access file %s.\n", static_cast<const char *>(p));
+	if (auto result = vfs::fs::file::open(p, mode))
 		return result;
 
 	if (required)
 	{
-		libretro_print(RETRO_LOG_ERROR, "Failed to open required file %s.\n", static_cast<const char *>(path));
+		libretro_print(RETRO_LOG_ERROR, "Failed to open required file %s.\n", static_cast<const char *>(p));
 		failed = true;
 	}
 
@@ -386,7 +373,44 @@ RETRO_API bool retro_load_game(const retro_game_info *game)
 		return false;
 
 	program->medium_paths(SuperFamicom::ID::System) = locate({ emulator_medium->name, ".sys/" });
-	program->medium_paths(emulator_medium->id) = game->path ? game->path : "";
+
+	// Try to find appropriate paths for save data.
+	// TODO: We need some sensible way to use retro_get_memory_data() I think ...
+	if (game->path)
+	{
+		auto base_name = string(game->path);
+		string save_path;
+
+		const char *save = nullptr;
+		if (environ_cb && environ_cb(RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY, &save) && save)
+			save_path = { save, "/", Location::base(base_name), "." };
+		else
+			save_path = { base_name.trimRight(Location::suffix(base_name)), "." };
+
+		program->medium_paths(emulator_medium->id) = save_path;
+	}
+	else
+	{
+		// No idea, use the game SHA256.
+		auto sha = string{ program->emulator->sha256(), ".sfc" };
+
+		const char *save = nullptr;
+		if (environ_cb && environ_cb(RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY, &save) && save)
+		{
+			string save_path = { save, "/", sha };
+			directory::create(save_path);
+			program->medium_paths(emulator_medium->id) = save_path;
+		}
+
+		// Use the system data somehow ...
+		auto path = locate(sha);
+		if (path)
+			directory::create(path);
+		program->medium_paths(emulator_medium->id) = path;
+	}
+
+	libretro_print(RETRO_LOG_INFO, "Using base path: %s for game data.\n", static_cast<const char *>(program->path(emulator_medium->id)));
+
 	program->game_data = static_cast<const uint8_t *>(game->data);
 	program->game_size = game->size;
 
