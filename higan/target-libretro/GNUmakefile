@@ -1,14 +1,14 @@
 name := libretro.so
-flags += -DSFC_SUPERGAMEBOY
+#flags += -DSFC_SUPERGAMEBOY
 
-include fc/GNUmakefile
+#include fc/GNUmakefile
 include sfc/GNUmakefile
-include ms/GNUmakefile
-include md/GNUmakefile
-include pce/GNUmakefile
-include gb/GNUmakefile
-include gba/GNUmakefile
-include ws/GNUmakefile
+#include ms/GNUmakefile
+#include md/GNUmakefile
+#include pce/GNUmakefile
+#include gb/GNUmakefile
+#include gba/GNUmakefile
+#include ws/GNUmakefile
 include processor/GNUmakefile
 
 # rules

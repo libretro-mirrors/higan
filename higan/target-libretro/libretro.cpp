@@ -2,20 +2,16 @@
 #include <nall/nall.hpp>
 #include <emulator/emulator.hpp>
 
-#include <fc/interface/interface.hpp>
 #include <sfc/interface/interface.hpp>
-#include <ms/interface/interface.hpp>
-#include <md/interface/interface.hpp>
-#include <pce/interface/interface.hpp>
-#include <gb/interface/interface.hpp>
-#include <gba/interface/interface.hpp>
-#include <ws/interface/interface.hpp>
 
 static retro_environment_t environ_cb;
 static retro_video_refresh_t video_cb;
 static retro_audio_sample_t audio_cb;
 static retro_input_poll_t input_poll;
 static retro_input_state_t input_state;
+static retro_log_printf_t libretro_print;
+
+#include "../../icarus/heuristics/super-famicom.cpp"
 
 static string locate(string name)
 {
@@ -24,6 +20,14 @@ static string locate(string name)
 	if (environ_cb && environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &sys) && sys)
 	{
 		string location = { sys, "/higan/", name };
+		if (inode::exists(location))
+			return location;
+	}
+
+	const char *save = nullptr;
+	if (environ_cb && environ_cb(RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY, &save) && save)
+	{
+		string location = { save, "/higan/", name };
 		if (inode::exists(location))
 			return location;
 	}
@@ -37,40 +41,19 @@ static string locate(string name)
 	return { Path::local(), "higan/", name };
 }
 
-// Bake in icarus, so we can build BML manifests.
-#include "../../icarus/settings.cpp"
-static Settings settings;
+static string locate_write_save(string name)
+{
+	// Try libretro specific paths first ...
+	const char *save = nullptr;
+	if (environ_cb && environ_cb(RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY, &save) && save)
+	{
+		directory::create({ save, "/higan/" });
+		if (inode::exists({ save, "/higan/" }))
+			return { save, "/higan/", name };
+	}
 
-#include "../../icarus/heuristics/famicom.cpp"
-#include "../../icarus/heuristics/super-famicom.cpp"
-#include "../../icarus/heuristics/master-system.cpp"
-#include "../../icarus/heuristics/mega-drive.cpp"
-#include "../../icarus/heuristics/pc-engine.cpp"
-#include "../../icarus/heuristics/supergrafx.cpp"
-#include "../../icarus/heuristics/game-boy.cpp"
-#include "../../icarus/heuristics/game-boy-advance.cpp"
-#include "../../icarus/heuristics/game-gear.cpp"
-#include "../../icarus/heuristics/wonderswan.cpp"
-#include "../../icarus/heuristics/bs-memory.cpp"
-#include "../../icarus/heuristics/sufami-turbo.cpp"
-
-#include "../../icarus/core/core.hpp"
-#include "../../icarus/core/core.cpp"
-#include "../../icarus/core/famicom.cpp"
-#include "../../icarus/core/super-famicom.cpp"
-#include "../../icarus/core/master-system.cpp"
-#include "../../icarus/core/mega-drive.cpp"
-#include "../../icarus/core/pc-engine.cpp"
-#include "../../icarus/core/supergrafx.cpp"
-#include "../../icarus/core/game-boy.cpp"
-#include "../../icarus/core/game-boy-color.cpp"
-#include "../../icarus/core/game-boy-advance.cpp"
-#include "../../icarus/core/game-gear.cpp"
-#include "../../icarus/core/wonderswan.cpp"
-#include "../../icarus/core/wonderswan-color.cpp"
-#include "../../icarus/core/bs-memory.cpp"
-#include "../../icarus/core/sufami-turbo.cpp"
-static Icarus icarus;
+	return locate(name);
+}
 
 struct Program : Emulator::Platform
 {
@@ -94,6 +77,10 @@ struct Program : Emulator::Platform
 
 	serializer cached_serialize;
 	bool has_cached_serialize = false;
+
+	const uint8_t *game_data = nullptr;
+	size_t game_size = 0;
+	bool failed = false;
 };
 
 static Program *program = nullptr;
@@ -101,26 +88,12 @@ static Program *program = nullptr;
 Program::Program()
 {
 	Emulator::platform = this;
-
-	emulators.append(new Famicom::Interface);
-	emulators.append(new SuperFamicom::Interface);
-	emulators.append(new MasterSystem::MasterSystemInterface);
-	emulators.append(new MegaDrive::Interface);
-	emulators.append(new PCEngine::PCEngineInterface);
-	emulators.append(new PCEngine::SuperGrafxInterface);
-	emulators.append(new GameBoy::GameBoyInterface);
-	emulators.append(new GameBoy::GameBoyColorInterface);
-	emulators.append(new GameBoyAdvance::Interface);
-	emulators.append(new MasterSystem::GameGearInterface);
-	emulators.append(new WonderSwan::WonderSwanInterface);
-	emulators.append(new WonderSwan::WonderSwanColorInterface);
+	emulator = new SuperFamicom::Interface;
 }
 
 Program::~Program()
 {
-	for (auto &emulator : emulators)
-		delete emulator;
-	emulators.reset();
+	delete emulator;
 }
 
 string Program::path(uint id)
@@ -130,19 +103,38 @@ string Program::path(uint id)
 
 vfs::shared::file Program::open(uint id, string name, vfs::file::mode mode, bool required)
 {
-	// TODO: Generate this inside the process by baking in icarus.
-	if (name == "manifest.bml" && !path(id).endsWith(".sys/"))
+	libretro_print(RETRO_LOG_INFO, "Accessing data from %u: %s (required: %s)\n",
+			id, static_cast<const char *>(name), required ? "yes" : "no");
+
+	// Load the system-wide manifest.
+	if (name == "manifest.bml" && id != SuperFamicom::ID::System)
 	{
-		string imported_path = icarus.import(path(id));
-		medium_paths(id) = imported_path;
-		string manifest = icarus.manifest(imported_path);
+		auto cart = SuperFamicomCartridge(game_data, game_size);
+		string manifest = cart.markup;
+		libretro_print(RETRO_LOG_INFO, "Manifest:\n%s\n", static_cast<const char *>(manifest));
 		return vfs::memory::file::open(manifest.data<uint8_t>(), manifest.size());
 	}
 
-	// Icarus::import currently forces files to disk, so the only thing we can do
-	// here is to obey for now ...
-	if (auto result = vfs::fs::file::open({ path(id), name }, mode))
+	// This is the game, so load from memory.
+	if (name == "program.rom")
+		return vfs::memory::file::open(game_data, game_size);
+
+	string path;
+	if (id == SuperFamicom::ID::System)
+		path = { medium_paths(SuperFamicom::ID::System), name };
+	else
+		path = locate(name);
+
+	// Something else, load it from disk.
+	libretro_print(RETRO_LOG_INFO, "Trying to access file %s.\n", static_cast<const char *>(path));
+	if (auto result = vfs::fs::file::open(path, mode))
 		return result;
+
+	if (required)
+	{
+		libretro_print(RETRO_LOG_ERROR, "Failed to open required file %s.\n", static_cast<const char *>(path));
+		failed = true;
+	}
 
 	return {};
 }
@@ -241,6 +233,10 @@ void Program::notify(string text)
 RETRO_API void retro_set_environment(retro_environment_t cb)
 {
 	environ_cb = cb;
+
+	retro_log_callback log = {};
+	if (environ_cb(RETRO_ENVIRONMENT_GET_LOG_INTERFACE, &log) && log.log)
+		libretro_print = log.log;
 }
 
 RETRO_API void retro_set_video_refresh(retro_video_refresh_t cb)
@@ -285,10 +281,10 @@ RETRO_API unsigned retro_api_version()
 
 RETRO_API void retro_get_system_info(retro_system_info *info)
 {
-	info->library_name = "higan";
+	info->library_name = "higan (Super Famicom)";
 	info->library_version = Emulator::Version;
 	info->valid_extensions = "sfc";
-	info->need_fullpath = true;
+	info->need_fullpath = false;
 	info->block_extract = false;
 }
 
@@ -302,7 +298,7 @@ RETRO_API void retro_get_system_av_info(struct retro_system_av_info *info)
 	info->geometry.aspect_ratio = res.aspectCorrection;
 
 	// TODO: This is currently not exposed in Emulator::Interface.
-	info->timing.fps = 60.098;
+	info->timing.fps = 21477272.0 / 357366.0;
 	info->timing.sample_rate = 44100.0;
 }
 
@@ -317,9 +313,9 @@ RETRO_API void retro_reset()
 
 RETRO_API void retro_run()
 {
+	program->has_cached_serialize = false;
 	input_poll();
 	program->emulator->run();
-	program->has_cached_serialize = false;
 }
 
 RETRO_API size_t retro_serialize_size()
@@ -370,47 +366,40 @@ RETRO_API void retro_cheat_set(unsigned index, bool enabled, const char *code)
 
 RETRO_API bool retro_load_game(const retro_game_info *game)
 {
-	if (program->emulator)
-		return false;
-
 	retro_pixel_format fmt = RETRO_PIXEL_FORMAT_XRGB8888;
 	if (!environ_cb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &fmt))
 		return false;
 
 	Emulator::audio.reset(2, 44100);
-	string location = game->path;
-	string type = Location::suffix(location).trimLeft(".", 1L);
 	const Emulator::Interface::Medium *emulator_medium = nullptr;
 
-	for (auto &emulator : program->emulators)
+	for (auto &medium : program->emulator->media)
 	{
-		for (auto &medium : emulator->media)
+		if (medium.type == "sfc")
 		{
-			if (medium.type == type)
-			{
-				program->emulator = emulator;
-				emulator_medium = &medium;
-				goto out;
-			}
+			emulator_medium = &medium;
+			break;
 		}
 	}
-out:
-
-	// ID 0 is the system path.
-	// This should probably be either baked into the core, or be redirected through environment callbacks.
-	// Asset directory perhaps?
-	program->medium_paths.append(locate({ emulator_medium->name, ".sys/" }));
-	program->medium_paths(emulator_medium->id) = location;
 
 	if (!program->emulator || !emulator_medium)
 		return false;
 
+	program->medium_paths(SuperFamicom::ID::System) = locate({ emulator_medium->name, ".sys/" });
+	program->medium_paths(emulator_medium->id) = game->path ? game->path : "";
+	program->game_data = static_cast<const uint8_t *>(game->data);
+	program->game_size = game->size;
+
 	if (!program->emulator->load(emulator_medium->id))
+		return false;
+
+	if (program->failed)
 		return false;
 
 	if (!program->emulator->loaded())
 		return false;
 
+	// Setup some defaults.
 	program->emulator->power();
 	Emulator::video.setSaturation(1.0);
 	Emulator::video.setGamma(1.0);
