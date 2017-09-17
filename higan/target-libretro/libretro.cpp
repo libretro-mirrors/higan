@@ -11,8 +11,24 @@
 #include <gba/interface/interface.hpp>
 #include <ws/interface/interface.hpp>
 
+static retro_environment_t environ_cb;
+static retro_video_refresh_t video_cb;
+static retro_audio_sample_t audio_cb;
+static retro_input_poll_t input_poll;
+static retro_input_state_t input_state;
+
 static string locate(string name)
 {
+	// Try libretro specific paths first ...
+	const char *sys = nullptr;
+	if (environ_cb && environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &sys) && sys)
+	{
+		string location = { sys, "/higan/", name };
+		if (inode::exists(location))
+			return location;
+	}
+
+	// If not, fall back to standard higan paths.
 	string location = { Path::config(), "higan/", name };
 	if (inode::exists(location))
 		return location;
@@ -56,12 +72,6 @@ static Settings settings;
 #include "../../icarus/core/sufami-turbo.cpp"
 static Icarus icarus;
 
-static retro_environment_t environ_cb;
-static retro_video_refresh_t video_cb;
-static retro_audio_sample_t audio_cb;
-static retro_input_poll_t input_poll;
-static retro_input_state_t input_state;
-
 struct Program : Emulator::Platform
 {
 	Program();
@@ -81,9 +91,9 @@ struct Program : Emulator::Platform
 	void notify(string text) override;
 
 	vector<string> medium_paths;
-	vector<vfs::shared::file> vfs_files;
-	vfs::shared::file rom_file;
-	uint game_system_id = ~0u;
+
+	serializer cached_serialize;
+	bool has_cached_serialize = false;
 };
 
 static Program *program = nullptr;
@@ -134,7 +144,6 @@ vfs::shared::file Program::open(uint id, string name, vfs::file::mode mode, bool
 	if (auto result = vfs::fs::file::open({ path(id), name }, mode))
 		return result;
 
-	//return vfs_files(id);
 	return {};
 }
 
@@ -167,6 +176,54 @@ void Program::audioSample(const double *samples, uint channels)
 
 int16 Program::inputPoll(uint port, uint device, uint input)
 {
+	// TODO: This will need to be remapped on a per-system basis.
+	unsigned libretro_port;
+	unsigned libretro_index = 0;
+	unsigned libretro_id;
+	unsigned libretro_device;
+
+	// It is not possible to just include sfc/controller/gamepad/gamepad.hpp without severe include errors, so
+	// don't bother ...
+	static const unsigned joypad_mapping[] = {
+		RETRO_DEVICE_ID_JOYPAD_UP,
+		RETRO_DEVICE_ID_JOYPAD_DOWN,
+		RETRO_DEVICE_ID_JOYPAD_LEFT,
+		RETRO_DEVICE_ID_JOYPAD_RIGHT,
+		RETRO_DEVICE_ID_JOYPAD_B,
+		RETRO_DEVICE_ID_JOYPAD_A,
+		RETRO_DEVICE_ID_JOYPAD_Y,
+		RETRO_DEVICE_ID_JOYPAD_X,
+		RETRO_DEVICE_ID_JOYPAD_L,
+		RETRO_DEVICE_ID_JOYPAD_R,
+		RETRO_DEVICE_ID_JOYPAD_SELECT,
+		RETRO_DEVICE_ID_JOYPAD_START,
+	};
+
+	switch (port)
+	{
+		case SuperFamicom::ID::Port::Controller1:
+			libretro_port = 0;
+			break;
+		case SuperFamicom::ID::Port::Controller2:
+			libretro_port = 1;
+			break;
+
+		default:
+			return 0;
+	}
+
+	switch (device)
+	{
+		case SuperFamicom::ID::Device::Gamepad:
+			libretro_device = RETRO_DEVICE_JOYPAD;
+			libretro_id = joypad_mapping[input];
+			break;
+
+		default:
+			return 0;
+	}
+
+	return input_state(libretro_port, libretro_device, libretro_index, libretro_id);
 }
 
 void Program::inputRumble(uint port, uint device, uint input, bool enable)
@@ -237,13 +294,16 @@ RETRO_API void retro_get_system_info(retro_system_info *info)
 
 RETRO_API void retro_get_system_av_info(struct retro_system_av_info *info)
 {
-	info->geometry.base_width = 256;
-	info->geometry.base_height = 240;
-	info->geometry.max_width = 512;
-	info->geometry.max_height = 480;
-	info->geometry.aspect_ratio = 4.0f / 3.0f;
-	info->timing.fps = 60.0f;
-	info->timing.sample_rate = 44100.0f;
+	auto res = program->emulator->videoResolution();
+	info->geometry.base_width = res.width;
+	info->geometry.base_height = res.height;
+	info->geometry.max_width = res.internalWidth;
+	info->geometry.max_height = res.internalHeight;
+	info->geometry.aspect_ratio = res.aspectCorrection;
+
+	// TODO: This is currently not exposed in Emulator::Interface.
+	info->timing.fps = 60.098;
+	info->timing.sample_rate = 44100.0;
 }
 
 RETRO_API void retro_set_controller_port_device(unsigned port, unsigned device)
@@ -259,29 +319,53 @@ RETRO_API void retro_run()
 {
 	input_poll();
 	program->emulator->run();
+	program->has_cached_serialize = false;
 }
 
 RETRO_API size_t retro_serialize_size()
 {
-	return 0;
+	if (program->has_cached_serialize)
+	{
+		return program->cached_serialize.size();
+	}
+	else
+	{
+		program->cached_serialize = program->emulator->serialize();
+		program->has_cached_serialize = true;
+		return program->cached_serialize.size();
+	}
 }
 
 RETRO_API bool retro_serialize(void *data, size_t size)
 {
-	return false;
+	if (!program->has_cached_serialize)
+	{
+		program->cached_serialize = program->emulator->serialize();
+		program->has_cached_serialize = true;
+	}
+
+	if (program->cached_serialize.size() != size)
+		return false;
+
+	memcpy(data, program->cached_serialize.data(), size);
+	return true;
 }
 
 RETRO_API bool retro_unserialize(const void *data, size_t size)
 {
-	return false;
+	serializer s(static_cast<const uint8_t *>(data), size);
+	program->has_cached_serialize = false;
+	return program->emulator->unserialize(s);
 }
 
 RETRO_API void retro_cheat_reset()
 {
+	program->has_cached_serialize = false;
 }
 
 RETRO_API void retro_cheat_set(unsigned index, bool enabled, const char *code)
 {
+	program->has_cached_serialize = false;
 }
 
 RETRO_API bool retro_load_game(const retro_game_info *game)
@@ -316,11 +400,7 @@ out:
 	// This should probably be either baked into the core, or be redirected through environment callbacks.
 	// Asset directory perhaps?
 	program->medium_paths.append(locate({ emulator_medium->name, ".sys/" }));
-
-	//program->rom_file = vfs::memory::file::open(static_cast<const uint8_t *>(game->data), game->size);
 	program->medium_paths(emulator_medium->id) = location;
-	//program->vfs_files(emulator_medium->id) = program->rom_file;
-	//program->game_system_id = emulator_medium->id;
 
 	if (!program->emulator || !emulator_medium)
 		return false;
@@ -333,7 +413,7 @@ out:
 
 	program->emulator->power();
 	Emulator::video.setSaturation(1.0);
-	Emulator::video.setGamma(2.2);
+	Emulator::video.setGamma(1.0);
 	Emulator::video.setLuminance(1.0);
 	Emulator::video.setPalette();
 	Emulator::audio.setFrequency(44100.0);
@@ -341,19 +421,13 @@ out:
 	Emulator::audio.setBalance(0.0);
 	Emulator::audio.setReverb(false);
 
-	for (auto &port : program->emulator->ports)
-	{
-		auto path = string{program->emulator->information.name, "/", port.name}.replace(" ", "");
-		auto name = settings(path).text();
-		for (auto &device : port.devices)
-		{
-			if (device.name == name)
-			{
-				program->emulator->connect(port.id, device.id);
-				break;
-			}
-		}
-	}
+	// Super Famicom specific.
+	program->emulator->connect(SuperFamicom::ID::Port::Controller1,
+			SuperFamicom::ID::Device::Gamepad);
+	program->emulator->connect(SuperFamicom::ID::Port::Controller2,
+			SuperFamicom::ID::Device::Gamepad);
+
+	program->has_cached_serialize = false;
 
 	return true;
 }
