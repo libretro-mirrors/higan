@@ -213,7 +213,7 @@ int16 Program::inputPoll(uint port, uint device, uint input)
 
 		case SuperFamicom::ID::Device::SuperMultitap:
 			libretro_device = RETRO_DEVICE_JOYPAD; // Maps to player [2, 5].
-			libretro_port += 1 + (input / 12);
+			libretro_port += input / 12;
 			libretro_id = joypad_mapping[input % 12];
 			break;
 
