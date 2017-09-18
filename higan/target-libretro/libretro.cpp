@@ -61,6 +61,8 @@ struct Program : Emulator::Platform
 	size_t game_size = 0;
 	string loaded_manifest;
 	bool failed = false;
+
+	bool overscan = false;
 };
 
 static Program *program = nullptr;
@@ -160,6 +162,16 @@ Emulator::Platform::Load Program::load(uint id, string name, string, string_vect
 
 void Program::videoRefresh(const uint32 *data, uint pitch, uint width, uint height)
 {
+	if (!program->overscan)
+	{
+		uint word_pitch = pitch >> 2;
+
+		data += uint(round(width * BackendSpecific::overscan_crop_ratio_offset_x));
+		data += word_pitch * uint(round(height * BackendSpecific::overscan_crop_ratio_offset_y));
+		width = uint(round(width * BackendSpecific::overscan_crop_ratio_scale_x));
+		height = uint(round(height * BackendSpecific::overscan_crop_ratio_scale_y));
+	}
+
 	video_cb(data, width, height, pitch);
 }
 
@@ -201,6 +213,8 @@ RETRO_API void retro_set_environment(retro_environment_t cb)
 	retro_log_callback log = {};
 	if (environ_cb(RETRO_ENVIRONMENT_GET_LOG_INTERFACE, &log) && log.log)
 		libretro_print = log.log;
+
+	set_environment_info(cb);
 }
 
 RETRO_API void retro_set_video_refresh(retro_video_refresh_t cb)
@@ -260,6 +274,14 @@ RETRO_API void retro_get_system_av_info(struct retro_system_av_info *info)
 	info->geometry.max_width = res.internalWidth;
 	info->geometry.max_height = res.internalHeight;
 	info->geometry.aspect_ratio = res.aspectCorrection;
+
+	if (!program->overscan)
+	{
+		info->geometry.base_width =
+			uint(round(info->geometry.base_width * BackendSpecific::overscan_crop_ratio_scale_x));
+		info->geometry.base_height =
+			uint(round(info->geometry.base_height * BackendSpecific::overscan_crop_ratio_scale_y));
+	}
 
 	// TODO: Get this exposed in Emulator::Interface.
 	info->timing.fps = 21477272.0 / 357366.0;
@@ -356,6 +378,9 @@ RETRO_API bool retro_load_game(const retro_game_info *game)
 
 	if (!program->emulator || !emulator_medium)
 		return false;
+
+	if (!environ_cb(RETRO_ENVIRONMENT_GET_OVERSCAN, &program->overscan))
+		program->overscan = false;
 
 	// Get the folder of the system directory.
 	// Generally, this will go unused, but it will be relevant for some backends.

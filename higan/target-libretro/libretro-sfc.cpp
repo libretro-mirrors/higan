@@ -1,6 +1,110 @@
+#define RETRO_DEVICE_JOYPAD_MULTITAP       RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_JOYPAD, 0)
+#define RETRO_DEVICE_LIGHTGUN_SUPER_SCOPE  RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_LIGHTGUN, 0)
+#define RETRO_DEVICE_LIGHTGUN_JUSTIFIER    RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_LIGHTGUN, 1)
+#define RETRO_DEVICE_LIGHTGUN_JUSTIFIERS   RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_LIGHTGUN, 2)
+
+static void set_environment_info(retro_environment_t cb)
+{
+	// TODO: Hook up RETRO_ENVIRONMENT_SET_SUBSYSTEM_INFO for Sufami/BSX/SGB?
+
+	static const retro_controller_description port_1[] = {
+		{ "SNES Joypad", RETRO_DEVICE_JOYPAD },
+		{ "SNES Mouse", RETRO_DEVICE_MOUSE },
+	};
+
+	static const retro_controller_description port_2[] = {
+		{ "SNES Joypad", RETRO_DEVICE_JOYPAD },
+		{ "SNES Mouse", RETRO_DEVICE_MOUSE },
+		{ "Multitap", RETRO_DEVICE_JOYPAD_MULTITAP },
+		{ "SuperScope", RETRO_DEVICE_LIGHTGUN_SUPER_SCOPE },
+		{ "Justifier", RETRO_DEVICE_LIGHTGUN_JUSTIFIER },
+		{ "Justifiers", RETRO_DEVICE_LIGHTGUN_JUSTIFIERS },
+	};
+
+	static const retro_controller_info ports[] = {
+		{ port_1, 2 },
+		{ port_2, 6 },
+		{ 0 },
+	};
+
+	cb(RETRO_ENVIRONMENT_SET_CONTROLLER_INFO, const_cast<retro_controller_info *>(ports));
+
+	static const retro_input_descriptor desc[] = {
+		{ 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT,  "D-Pad Left" },
+		{ 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_UP,    "D-Pad Up" },
+		{ 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_DOWN,  "D-Pad Down" },
+		{ 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_RIGHT, "D-Pad Right" },
+		{ 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B,     "B" },
+		{ 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A,     "A" },
+		{ 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_X,     "X" },
+		{ 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_Y,     "Y" },
+		{ 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L,     "L" },
+		{ 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R,     "R" },
+		{ 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_SELECT,   "Select" },
+		{ 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START,    "Start" },
+
+		{ 1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT,  "D-Pad Left" },
+		{ 1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_UP,    "D-Pad Up" },
+		{ 1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_DOWN,  "D-Pad Down" },
+		{ 1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_RIGHT, "D-Pad Right" },
+		{ 1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B,     "B" },
+		{ 1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A,     "A" },
+		{ 1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_X,     "X" },
+		{ 1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_Y,     "Y" },
+		{ 1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L,     "L" },
+		{ 1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R,     "R" },
+		{ 1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_SELECT,   "Select" },
+		{ 1, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START,    "Start" },
+
+		{ 2, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT,  "D-Pad Left" },
+		{ 2, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_UP,    "D-Pad Up" },
+		{ 2, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_DOWN,  "D-Pad Down" },
+		{ 2, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_RIGHT, "D-Pad Right" },
+		{ 2, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B,     "B" },
+		{ 2, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A,     "A" },
+		{ 2, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_X,     "X" },
+		{ 2, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_Y,     "Y" },
+		{ 2, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L,     "L" },
+		{ 2, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R,     "R" },
+		{ 2, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_SELECT,   "Select" },
+		{ 2, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START,    "Start" },
+
+		{ 3, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT,  "D-Pad Left" },
+		{ 3, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_UP,    "D-Pad Up" },
+		{ 3, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_DOWN,  "D-Pad Down" },
+		{ 3, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_RIGHT, "D-Pad Right" },
+		{ 3, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B,     "B" },
+		{ 3, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A,     "A" },
+		{ 3, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_X,     "X" },
+		{ 3, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_Y,     "Y" },
+		{ 3, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L,     "L" },
+		{ 3, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R,     "R" },
+		{ 3, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_SELECT,   "Select" },
+		{ 3, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START,    "Start" },
+
+		{ 4, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT,  "D-Pad Left" },
+		{ 4, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_UP,    "D-Pad Up" },
+		{ 4, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_DOWN,  "D-Pad Down" },
+		{ 4, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_RIGHT, "D-Pad Right" },
+		{ 4, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B,     "B" },
+		{ 4, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A,     "A" },
+		{ 4, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_X,     "X" },
+		{ 4, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_Y,     "Y" },
+		{ 4, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L,     "L" },
+		{ 4, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R,     "R" },
+		{ 4, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_SELECT,   "Select" },
+		{ 4, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START,    "Start" },
+
+		{ 0 },
+	};
+
+	cb(RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS, const_cast<retro_input_descriptor *>(desc));
+}
+
 // Normally, these files are loaded from an external folder after Higan is installed,
 // but we shouldn't require that for a libretro core.
 // One alternative is installing this inside the asset directory or something.
+// But I don't see the reason for this to ever change.
 static vfs::shared::file load_builtin_system_file(string name)
 {
 	if (name == "manifest.bml")
@@ -43,8 +147,6 @@ int16 Program::inputPoll(uint port, uint device, uint input)
 	unsigned libretro_id;
 	unsigned libretro_device;
 
-	// It is not possible to just include sfc/controller/gamepad/gamepad.hpp without severe include errors, so
-	// don't bother ...
 	static const unsigned joypad_mapping[] = {
 		RETRO_DEVICE_ID_JOYPAD_UP,
 		RETRO_DEVICE_ID_JOYPAD_DOWN,
@@ -89,16 +191,40 @@ int16 Program::inputPoll(uint port, uint device, uint input)
 
 static void set_default_controller_ports()
 {
-	// Super Famicom specific.
 	program->emulator->connect(SuperFamicom::ID::Port::Controller1,
 			SuperFamicom::ID::Device::Gamepad);
 	program->emulator->connect(SuperFamicom::ID::Port::Controller2,
 			SuperFamicom::ID::Device::Gamepad);
 }
 
+static uint retro_device_to_snes(unsigned device)
+{
+	switch (device)
+	{
+		default:
+		case RETRO_DEVICE_NONE:
+			return SuperFamicom::ID::Device::None;
+		case RETRO_DEVICE_JOYPAD:
+			return SuperFamicom::ID::Device::Gamepad;
+		case RETRO_DEVICE_ANALOG:
+			return SuperFamicom::ID::Device::Gamepad;
+		case RETRO_DEVICE_JOYPAD_MULTITAP:
+			return SuperFamicom::ID::Device::SuperMultitap;
+		case RETRO_DEVICE_MOUSE:
+			return SuperFamicom::ID::Device::Mouse;
+		case RETRO_DEVICE_LIGHTGUN_SUPER_SCOPE:
+			return SuperFamicom::ID::Device::SuperScope;
+		case RETRO_DEVICE_LIGHTGUN_JUSTIFIER:
+			return SuperFamicom::ID::Device::Justifier;
+		case RETRO_DEVICE_LIGHTGUN_JUSTIFIERS:
+			return SuperFamicom::ID::Device::Justifiers;
+	}
+}
+
 static void set_controller_ports(unsigned port, unsigned device)
 {
-	// TODO:
+	if (port < 2)
+		program->emulator->connect(port, retro_device_to_snes(device));
 }
 
 namespace BackendSpecific
@@ -108,5 +234,11 @@ static const char *medium_type = "sfc";
 static const char *name = "higan (Super Famicom)";
 static const uint system_id = SuperFamicom::ID::System;
 static const double audio_rate = 44100.0; // MSU-1 is 44.1k CD, so use that.
+
+// TODO: Get this exposed in Emulator::Interface?
+static const double overscan_crop_ratio_offset_x = 0.0;
+static const double overscan_crop_ratio_offset_y = 0.5 * (240.0 - 224.0) / 240.0;
+static const double overscan_crop_ratio_scale_x = 1.0;
+static const double overscan_crop_ratio_scale_y = 224.0 / 240.0;
 }
 
