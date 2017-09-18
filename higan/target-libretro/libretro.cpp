@@ -35,7 +35,6 @@ struct Program : Emulator::Platform
 	Program();
 	~Program();
 
-	vector<Emulator::Interface *> emulators;
 	Emulator::Interface *emulator = nullptr;
 
 	string path(uint id) override;
