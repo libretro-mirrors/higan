@@ -6,6 +6,8 @@
 static void set_environment_info(retro_environment_t cb)
 {
 	// TODO: Hook up RETRO_ENVIRONMENT_SET_SUBSYSTEM_INFO for Sufami/BSX/SGB?
+	// IIRC, no known frontend actually hooks it up properly, so doubt there is any
+	// real need for now.
 
 	static const retro_controller_description port_1[] = {
 		{ "SNES Joypad", RETRO_DEVICE_JOYPAD },
@@ -141,11 +143,13 @@ system name:Super Famicom
 
 int16 Program::inputPoll(uint port, uint device, uint input)
 {
+	poll_once();
+
 	// TODO: This will need to be remapped on a per-system basis.
 	unsigned libretro_port;
-	unsigned libretro_index = 0;
 	unsigned libretro_id;
 	unsigned libretro_device;
+	unsigned libretro_index = 0;
 
 	static const unsigned joypad_mapping[] = {
 		RETRO_DEVICE_ID_JOYPAD_UP,
@@ -160,6 +164,13 @@ int16 Program::inputPoll(uint port, uint device, uint input)
 		RETRO_DEVICE_ID_JOYPAD_R,
 		RETRO_DEVICE_ID_JOYPAD_SELECT,
 		RETRO_DEVICE_ID_JOYPAD_START,
+	};
+
+	static const unsigned mouse_mapping[] = {
+		RETRO_DEVICE_ID_MOUSE_X,
+		RETRO_DEVICE_ID_MOUSE_Y,
+		RETRO_DEVICE_ID_MOUSE_LEFT,
+		RETRO_DEVICE_ID_MOUSE_RIGHT,
 	};
 
 	switch (port)
@@ -181,6 +192,20 @@ int16 Program::inputPoll(uint port, uint device, uint input)
 			libretro_device = RETRO_DEVICE_JOYPAD;
 			libretro_id = joypad_mapping[input];
 			break;
+
+		case SuperFamicom::ID::Device::Mouse:
+			libretro_device = RETRO_DEVICE_MOUSE;
+			libretro_id = mouse_mapping[input];
+			break;
+
+		case SuperFamicom::ID::Device::SuperMultitap:
+			libretro_device = RETRO_DEVICE_JOYPAD; // Maps to player [2, 5].
+			libretro_port += 1 + (input / 12);
+			libretro_id = joypad_mapping[input % 12];
+			break;
+
+		// TODO: SuperScope/Justifiers.
+		// Do we care? The v94 port hasn't hooked them up. :)
 
 		default:
 			return 0;

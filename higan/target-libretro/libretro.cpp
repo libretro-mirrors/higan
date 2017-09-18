@@ -63,6 +63,9 @@ struct Program : Emulator::Platform
 	bool failed = false;
 
 	bool overscan = false;
+
+	void poll_once();
+	bool polled = false;
 };
 
 static Program *program = nullptr;
@@ -206,6 +209,15 @@ void Program::notify(string text)
 	libretro_print(RETRO_LOG_INFO, "higan INFO: %s\n", static_cast<const char *>(text));
 }
 
+void Program::poll_once()
+{
+	if (!program->polled)
+	{
+		input_poll();
+		program->polled = true;
+	}
+}
+
 RETRO_API void retro_set_environment(retro_environment_t cb)
 {
 	environ_cb = cb;
@@ -302,9 +314,10 @@ RETRO_API void retro_reset()
 
 RETRO_API void retro_run()
 {
+	program->polled = false;
 	program->has_cached_serialize = false;
-	input_poll();
 	program->emulator->run();
+	program->poll_once(); // In case higan did not poll this frame.
 }
 
 RETRO_API size_t retro_serialize_size()
