@@ -1,3 +1,13 @@
+ifneq ($(platform),windows)
+  flags += -fPIC
+endif
+
+ifneq ($(target),macosx)
+  link += -shared
+else
+  link += -dynamiclib
+endif
+
 ifeq ($(core),sfc)
   corename := sfc
   include sfc/GNUmakefile

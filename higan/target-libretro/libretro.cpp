@@ -56,12 +56,15 @@ struct Program : Emulator::Platform
 	const uint8_t *game_data = nullptr;
 	size_t game_size = 0;
 	string loaded_manifest;
-	bool failed = false;
 
+	bool failed = false;
+	bool polled = false;
 	bool overscan = false;
 
 	void poll_once();
-	bool polled = false;
+
+	uint current_width = 0;
+	uint current_height = 0;
 };
 
 static Program *program = nullptr;
@@ -174,6 +177,22 @@ void Program::videoRefresh(const uint32 *data, uint pitch, uint width, uint heig
 		height = uint(round(height * BackendSpecific::overscan_crop_ratio_scale_y));
 	}
 
+	if (width != program->current_width || height != program->current_height)
+	{
+		// If internal resolution changes, notify the frontend if it cares about it.
+		retro_game_geometry geom = {};
+		geom.base_width = width;
+		geom.base_height = height;
+		geom.aspect_ratio = emulator->videoResolution().aspectCorrection;
+		program->current_width = width;
+		program->current_height = height;
+		environ_cb(RETRO_ENVIRONMENT_SET_GEOMETRY, &geom);
+	}
+
+	// On at least SNES, this will be pixel doubled in most cases.
+	// We could expose a core option to blend down to 256x224 or similar,
+	// but I'd rather that be handled by special downsampling shaders.
+
 	video_cb(data, width, height, pitch);
 }
 
@@ -185,7 +204,7 @@ static int16_t d2i16(double v)
 		v = 0x7fff;
 	else if (v < -0x8000)
 		v = -0x8000;
-	return int16_t(v);
+	return int16_t(floor(v + 0.5));
 }
 
 void Program::audioSample(const double *samples, uint channels)
@@ -481,6 +500,11 @@ RETRO_API bool retro_load_game(const retro_game_info *game)
 
 	set_default_controller_ports();
 	program->has_cached_serialize = false;
+
+	retro_system_av_info av_info;
+	retro_get_system_av_info(&av_info);
+	program->current_width = av_info.geometry.base_width;
+	program->current_height = av_info.geometry.base_height;
 
 	return true;
 }
