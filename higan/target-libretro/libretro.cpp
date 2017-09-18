@@ -2,16 +2,12 @@
 #include <nall/nall.hpp>
 #include <emulator/emulator.hpp>
 
-#include <sfc/interface/interface.hpp>
-
 static retro_environment_t environ_cb;
 static retro_video_refresh_t video_cb;
 static retro_audio_sample_t audio_cb;
 static retro_input_poll_t input_poll;
 static retro_input_state_t input_state;
 static retro_log_printf_t libretro_print;
-
-#include "../../icarus/heuristics/super-famicom.cpp"
 
 static string locate(string name)
 {
@@ -70,12 +66,16 @@ struct Program : Emulator::Platform
 
 static Program *program = nullptr;
 
+#if defined(libretro_use_sfc)
 #include "libretro-sfc.cpp"
+#else
+#error "Unrecognized higan core."
+#endif
 
 Program::Program()
 {
 	Emulator::platform = this;
-	emulator = new SuperFamicom::Interface;
+	emulator = create_emulator_interface();
 }
 
 Program::~Program()
@@ -103,8 +103,7 @@ vfs::shared::file Program::open(uint id, string name, vfs::file::mode mode, bool
 		else
 		{
 			// Generate it.
-			auto cart = SuperFamicomCartridge(game_data, game_size);
-			manifest = cart.markup;
+			manifest = create_manifest_markup(game_data, game_size);
 		}
 
 		libretro_print(RETRO_LOG_INFO,
@@ -397,7 +396,7 @@ RETRO_API bool retro_load_game(const retro_game_info *game)
 
 	// Get the folder of the system directory.
 	// Generally, this will go unused, but it will be relevant for some backends.
-	program->medium_paths(SuperFamicom::ID::System) = locate({ emulator_medium->name, ".sys/" });
+	program->medium_paths(BackendSpecific::system_id) = locate({ emulator_medium->name, ".sys/" });
 
 	// TODO: Can we detect more robustly if we have a BML loaded from memory?
 	// If we don't have a path (game loaded from pure VFS for example), we cannot use manifests.
