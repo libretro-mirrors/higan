@@ -491,6 +491,11 @@ RETRO_API bool retro_load_game(const retro_game_info *game)
 	Emulator::video.setSaturation(1.0);
 	Emulator::video.setGamma(1.0);
 	Emulator::video.setLuminance(1.0);
+
+	// These should be done in shaders if we care. TODO: Core option?
+	Emulator::video.setEffect(Emulator::Video::Effect::ColorBleed, false);
+	Emulator::video.setEffect(Emulator::Video::Effect::InterframeBlending, false);
+
 	Emulator::video.setPalette();
 	Emulator::audio.setFrequency(44100.0);
 	Emulator::audio.setVolume(1.0);
