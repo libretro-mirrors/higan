@@ -271,7 +271,7 @@ namespace BackendSpecific
 {
 static const char *extensions = "sfc|bml";
 static const char *medium_type = "sfc";
-static const char *name = "higan (Super Famicom)";
+static const char *name = "higan (Super Famicom) WIP";
 static const uint system_id = SuperFamicom::ID::System;
 static const double audio_rate = 44100.0; // MSU-1 is 44.1k CD, so use that.
 
