@@ -182,7 +182,7 @@ void Program::videoRefresh(const uint32 *data, uint pitch, uint width, uint heig
 		retro_game_geometry geom = {};
 		geom.base_width = width;
 		geom.base_height = height;
-		geom.aspect_ratio = emulator->videoResolution().aspectCorrection;
+		geom.aspect_ratio = emulator->videoInformation().aspectCorrection;
 		program->current_width = width;
 		program->current_height = height;
 		environ_cb(RETRO_ENVIRONMENT_SET_GEOMETRY, &geom);
@@ -297,7 +297,7 @@ RETRO_API void retro_get_system_info(retro_system_info *info)
 
 RETRO_API void retro_get_system_av_info(struct retro_system_av_info *info)
 {
-	auto res = program->emulator->videoResolution();
+	auto res = program->emulator->videoInformation();
 	info->geometry.base_width = res.width;
 	info->geometry.base_height = res.height;
 	info->geometry.max_width = res.internalWidth;
@@ -312,8 +312,7 @@ RETRO_API void retro_get_system_av_info(struct retro_system_av_info *info)
 			uint(round(info->geometry.base_height * BackendSpecific::overscan_crop_ratio_scale_y));
 	}
 
-	// TODO: Get this exposed in Emulator::Interface.
-	info->timing.fps = 21477272.0 / 357366.0;
+	info->timing.fps = res.refreshRate;
 
 	// We control this.
 	info->timing.sample_rate = BackendSpecific::audio_rate;
@@ -523,8 +522,20 @@ RETRO_API void retro_unload_game()
 
 RETRO_API unsigned retro_get_region()
 {
-	// TODO: Get this exposed in Emulator::Interface.
-	return RETRO_REGION_NTSC;
+	// This function isn't all that important, but according to byuu,
+	// less than 59 FPS would mean PAL to account for possible variations in the implementation.
+	if (program && program->emulator)
+	{
+		if (program->emulator->videoInformation().refreshRate < 59.0f)
+			return RETRO_REGION_PAL;
+		else
+			return RETRO_REGION_NTSC;
+	}
+	else
+	{
+		// Shouldn't happen, but provide some fallback.
+		return RETRO_REGION_NTSC;
+	}
 }
 
 // Currently, there is no safe/sensible way to use the memory interface without severe hackery.
