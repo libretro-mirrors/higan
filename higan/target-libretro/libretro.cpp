@@ -54,6 +54,7 @@ struct LibretroIcarus : Icarus
 		imported_data.resize(size);
 		memory::copy(imported_data.data(), data, size);
 		imported_files.insert(imported_path, std::move(imported_data));
+		libretro_print(RETRO_LOG_INFO, "Icarus writes file: %s.\n", static_cast<const char *>(imported_path));
 		return true;
 	}
 
@@ -61,9 +62,15 @@ struct LibretroIcarus : Icarus
 	{
 		auto result = imported_files.find(pathname);
 		if (result)
+		{
+			libretro_print(RETRO_LOG_INFO, "Icarus successfully read: %s.\n", static_cast<const char *>(pathname));
 			return result.get();
+		}
 		else
+		{
+			libretro_print(RETRO_LOG_ERROR, "Icarus failed to read: %s.\n", static_cast<const char *>(pathname));
 			return {};
+		}
 	}
 
 	void reset()
@@ -184,6 +191,8 @@ vfs::shared::file Program::open(uint id, string name, vfs::file::mode mode, bool
 	auto imported = icarus.imported_files.find(name);
 	if (imported)
 	{
+		libretro_print(RETRO_LOG_INFO, "Reading imported file: %s.\n", static_cast<const char *>(name));
+
 		auto &file = imported.get();
 		if (name == "manifest.bml")
 		{
