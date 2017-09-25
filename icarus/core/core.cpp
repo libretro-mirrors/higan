@@ -35,7 +35,7 @@ auto Icarus::failure(string message) -> string {
 
 auto Icarus::manifest(string location) -> string {
   location.transform("\\", "/").trimRight("/").append("/");
-  if(!directory::exists(location)) return "";
+  if(!directory_exists(location)) return "";
 
   auto type = Location::suffix(location).downcase();
   if(type == ".fc") return famicomManifest(location);
@@ -61,14 +61,14 @@ auto Icarus::import(string location) -> string {
   missingFiles = {};
 
   location.transform("\\", "/").trimRight("/");
-  if(!file::exists(location)) return failure("file does not exist");
-  if(!file::readable(location)) return failure("file is unreadable");
+  if(!exists(location)) return failure("file does not exist");
+  if(!readable(location)) return failure("file is unreadable");
 
   auto name = Location::prefix(location);
   auto type = Location::suffix(location).downcase();
   if(!name || !type) return failure("invalid file name");
 
-  auto buffer = file::read(location);
+  auto buffer = read(location);
   if(!buffer) return failure("file is empty");
 
   if(type == ".zip") {
@@ -100,7 +100,7 @@ auto Icarus::import(string location) -> string {
 }
 
 auto Icarus::concatenate(vector<uint8_t>& output, string location) -> void {
-  if(auto input = file::read(location)) {
+  if(auto input = read(location)) {
     auto size = output.size();
     output.resize(size + input.size());
     memory::copy(output.data() + size, input.data(), input.size());
