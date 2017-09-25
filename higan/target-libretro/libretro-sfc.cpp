@@ -1,16 +1,9 @@
 #include <sfc/interface/interface.hpp>
-#include "../../icarus/heuristics/super-famicom.cpp"
 static Emulator::Interface *create_emulator_interface()
 {
 	auto *iface = new SuperFamicom::Interface;
 	iface->set("Blur Emulation", false);
 	return iface;
-}
-
-static string create_manifest_markup(const uint8_t *data, size_t size)
-{
-	auto cart = SuperFamicomCartridge(data, size);
-	return cart.markup;
 }
 
 #define RETRO_DEVICE_JOYPAD_MULTITAP       RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_JOYPAD, 0)

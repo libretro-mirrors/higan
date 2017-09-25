@@ -9,7 +9,73 @@ static retro_input_poll_t input_poll;
 static retro_input_state_t input_state;
 static retro_log_printf_t libretro_print;
 
-static string locate(string name)
+#define ICARUS_LIBRARY
+#include "../../icarus/icarus.cpp"
+
+struct LibretroIcarus : Icarus
+{
+	LibretroIcarus()
+	{
+		settings["icarus/CreateManifests"].setValue(true);
+	}
+
+	// Stub out most of this. We use a memory-only interface.
+	bool create(const string &) override
+	{
+		return true;
+	}
+
+	bool copy(const string &, const string &) override
+	{
+		return true;
+	}
+
+	bool exists(const string &) override
+	{
+		return true;
+	}
+
+	bool directory_exists(const string &) override
+	{
+		return true;
+	}
+
+	bool readable(const string &) override
+	{
+		return true;
+	}
+
+	bool write(const string &filename, const uint8_t *data, uint size) override
+	{
+		// To avoid any directories in the mix in case Icarus wants to write to ~/Emulation or similar.
+		auto imported_path = Location::file(filename);
+		vector<uint8_t> imported_data;
+
+		imported_data.resize(size);
+		memory::copy(imported_data.data(), data, size);
+		imported_files.insert(imported_path, std::move(imported_data));
+		return true;
+	}
+
+	vector<uint8_t> read(const string &pathname) override
+	{
+		auto result = imported_files.find(pathname);
+		if (result)
+			return result.get();
+		else
+			return {};
+	}
+
+	void reset()
+	{
+		imported_files.reset();
+	}
+
+	map<string, vector<uint8_t>> imported_files;
+};
+static LibretroIcarus icarus;
+
+static string locate_libretro(string name)
 {
 	// Try libretro specific paths first ...
 	// This is relevant for special chip ROMs/BIOS, etc.
@@ -52,8 +118,7 @@ struct Program : Emulator::Platform
 	serializer cached_serialize;
 	bool has_cached_serialize = false;
 
-	const uint8_t *game_data = nullptr;
-	size_t game_size = 0;
+	string fake_game_path;
 	string loaded_manifest;
 
 	bool failed = false;
@@ -96,20 +161,12 @@ vfs::shared::file Program::open(uint id, string name, vfs::file::mode mode, bool
 			id, static_cast<const char *>(name), required ? "yes" : "no");
 
 	// Load the game manifest.
-	if (name == "manifest.bml" && id != BackendSpecific::system_id)
+	if (name == "manifest.bml" && id != BackendSpecific::system_id && loaded_manifest)
 	{
-		string manifest;
-
-		if (loaded_manifest)
-			manifest = loaded_manifest;
-		else
-		{
-			// Generate it.
-			manifest = create_manifest_markup(game_data, game_size);
-		}
+		string manifest = loaded_manifest;
 
 		libretro_print(RETRO_LOG_INFO,
-				"Manifest:\n%s\n",
+				"Loaded Manifest:\n%s\n",
 				static_cast<const char *>(manifest));
 
 		return vfs::memory::file::open(manifest.data<uint8_t>(), manifest.size());
@@ -123,9 +180,20 @@ vfs::shared::file Program::open(uint id, string name, vfs::file::mode mode, bool
 			return builtin;
 	}
 
-	// This is the game, so load from memory.
-	if (name == "program.rom" && id != BackendSpecific::system_id && game_data && game_size)
-		return vfs::memory::file::open(game_data, game_size);
+	// If this is file we imported in Icarus, use that.
+	auto imported = icarus.imported_files.find(name);
+	if (imported)
+	{
+		auto &file = imported.get();
+		if (name == "manifest.bml")
+		{
+			string manifest(reinterpret_cast<const char *>(file.data()), file.size());
+			libretro_print(RETRO_LOG_INFO,
+					"Loaded Manifest:\n%s\n",
+					static_cast<const char *>(manifest));
+		}
+		return vfs::memory::file::open(file.data(), file.size());
+	}
 
 	// This will be the default save path as chosen during load.
 	// If we load from manifest, this will always point to the appropriate directory.
@@ -138,7 +206,7 @@ vfs::shared::file Program::open(uint id, string name, vfs::file::mode mode, bool
 				"%s does not exist, trying another path.\n",
 				static_cast<const char *>(p));
 
-		p = locate(name);
+		p = locate_libretro(name);
 	}
 
 	// Something else, load it from disk.
@@ -413,19 +481,36 @@ RETRO_API bool retro_load_game(const retro_game_info *game)
 
 	// Get the folder of the system directory.
 	// Generally, this will go unused, but it will be relevant for some backends.
-	program->medium_paths(BackendSpecific::system_id) = locate({ emulator_medium->name, ".sys/" });
+	program->medium_paths(BackendSpecific::system_id) = locate_libretro({ emulator_medium->name, ".sys/" });
 
 	// TODO: Can we detect more robustly if we have a BML loaded from memory?
 	// If we don't have a path (game loaded from pure VFS for example), we cannot use manifests.
 	bool loading_manifest = game->path && string(game->path).endsWith(".bml");
 
+	program->fake_game_path.reset();
+	program->loaded_manifest.reset();
+
 	if (loading_manifest)
 	{
 		// Load ROM and RAM from the directory.
 		program->medium_paths(emulator_medium->id) = Location::dir(game->path);
+		program->loaded_manifest = string_view(static_cast<const char *>(game->data), game->size);
 	}
 	else
 	{
+		// Import the game with Icarus.
+		// Create a fake path for Icarus to import.
+		// We need a sane extension so Icarus can dispatch to the right importer.
+		program->fake_game_path = { "game.", BackendSpecific::medium_type };
+		icarus.reset();
+		icarus.write(program->fake_game_path, static_cast<const uint8_t *>(game->data), game->size);
+
+		if (!icarus.import(program->fake_game_path))
+		{
+			libretro_print(RETRO_LOG_ERROR, "Failed to import game with Icarus.\n");
+			return false;
+		}
+
 		// Try to find appropriate paths for save data.
 		if (game->path)
 		{
@@ -455,24 +540,15 @@ RETRO_API bool retro_load_game(const retro_game_info *game)
 			else
 			{
 				// Use the system data somehow ... This is really deep into fallback territory.
-				auto path = locate(sha);
+				auto path = locate_libretro(sha);
 				directory::create(path);
 				program->medium_paths(emulator_medium->id) = path;
 			}
 		}
 	}
 
-	libretro_print(RETRO_LOG_INFO, "Using base path: %s for game data.\n", static_cast<const char *>(program->path(emulator_medium->id)));
-
-	if (loading_manifest)
-	{
-		program->loaded_manifest = string_view(static_cast<const char *>(game->data), game->size);
-	}
-	else
-	{
-		program->game_data = static_cast<const uint8_t *>(game->data);
-		program->game_size = game->size;
-	}
+	libretro_print(RETRO_LOG_INFO, "Using base path: %s for game data.\n",
+			static_cast<const char *>(program->path(emulator_medium->id)));
 
 	if (!program->emulator->load(emulator_medium->id))
 		return false;
