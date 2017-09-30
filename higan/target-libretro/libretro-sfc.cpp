@@ -262,7 +262,7 @@ static void set_controller_ports(unsigned port, unsigned device)
 
 namespace BackendSpecific
 {
-static const char *extensions = "sfc|smc|bml"; // Icarus supports headered ROMs as well.
+static const char *extensions = "sfc|smc|bml|rom"; // Icarus supports headered ROMs as well.
 static const char *medium_type = "sfc";
 static const char *name = "higan (Super Famicom) WIP";
 static const uint system_id = SuperFamicom::ID::System;

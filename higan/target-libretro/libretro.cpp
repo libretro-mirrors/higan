@@ -104,6 +104,7 @@ struct LibretroIcarus : Icarus
 	map<string, vector<uint8_t>> imported_files;
 };
 static LibretroIcarus icarus;
+static Icarus plain_icarus;
 
 bool LibretroIcarus::import_rom(const string &fake_path, const uint8_t *rom_data, size_t rom_size)
 {
@@ -546,11 +547,31 @@ RETRO_API bool retro_load_game(const retro_game_info *game)
 	// TODO: Can we detect more robustly if we have a BML loaded from memory?
 	// If we don't have a path (game loaded from pure VFS for example), we cannot use manifests.
 	bool loading_manifest = game->path && string(game->path).endsWith(".bml");
+	bool loading_folder = game->path && string(game->path).endsWith(".rom");
 
 	program->fake_game_path.reset();
 	program->loaded_manifest.reset();
 
-	if (loading_manifest)
+	if (loading_folder)
+	{
+		// If we try load a ROM file, assume this is inside a foltainer (typically called program.rom), and we should create a manifest.
+		// This seems to be the preferred way as the manifest format is not *that* stable.
+		program->medium_paths(emulator_medium->id) = Location::dir(game->path);
+		libretro_print(RETRO_LOG_INFO, "Trying to generate manifest for foltainer: %s.\n",
+				static_cast<const char *>(program->medium_paths(emulator_medium->id)));
+
+		// Have to use plain Icarus here or we have to use the memory-only interface in LibretroIcarus.
+		program->loaded_manifest = plain_icarus.manifest(program->medium_paths(emulator_medium->id));
+		loading_manifest = true;
+
+		if (!program->loaded_manifest)
+		{
+			libretro_print(RETRO_LOG_ERROR, "Failed to create manifest from foltainer: %s.\n",
+					static_cast<const char *>(program->medium_paths(emulator_medium->id)));
+			return false;
+		}
+	}
+	else if (loading_manifest)
 	{
 		// Load ROM and RAM from the directory.
 		program->medium_paths(emulator_medium->id) = Location::dir(game->path);
