@@ -262,16 +262,29 @@ static void set_controller_ports(unsigned port, unsigned device)
 
 namespace BackendSpecific
 {
-static const char *extensions = "sfc|bml";
+static const char *extensions = "sfc|smc|bml"; // Icarus supports headered ROMs as well.
 static const char *medium_type = "sfc";
 static const char *name = "higan (Super Famicom) WIP";
 static const uint system_id = SuperFamicom::ID::System;
 static const double audio_rate = 44100.0; // MSU-1 is 44.1k CD, so use that.
 
 // TODO: Get this exposed in Emulator::Interface?
+namespace NTSC
+{
+// Canonically, SNES video output is 256x224.
 static const double overscan_crop_ratio_offset_x = 0.0;
 static const double overscan_crop_ratio_offset_y = 0.5 * (240.0 - 224.0) / 240.0;
 static const double overscan_crop_ratio_scale_x = 1.0;
 static const double overscan_crop_ratio_scale_y = 224.0 / 240.0;
+}
+
+namespace PAL
+{
+// Use full-res on PAL.
+static const double overscan_crop_ratio_offset_x = 0.0;
+static const double overscan_crop_ratio_offset_y = 0.0;
+static const double overscan_crop_ratio_scale_x = 1.0;
+static const double overscan_crop_ratio_scale_y = 1.0;
+}
 }
 

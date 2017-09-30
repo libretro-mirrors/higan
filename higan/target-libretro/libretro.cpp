@@ -173,6 +173,11 @@ struct Program : Emulator::Platform
 
 	uint current_width = 0;
 	uint current_height = 0;
+
+	double overscan_crop_ratio_offset_x;
+	double overscan_crop_ratio_offset_y;
+	double overscan_crop_ratio_scale_x;
+	double overscan_crop_ratio_scale_y;
 };
 
 static Program *program = nullptr;
@@ -273,9 +278,10 @@ vfs::shared::file Program::open(uint id, string name, vfs::file::mode mode, bool
 	return {};
 }
 
-Emulator::Platform::Load Program::load(uint id, string name, string, string_vector)
+Emulator::Platform::Load Program::load(uint id, string name, string, string_vector options)
 {
-	return { id, name };
+	// Have to return the first option here to get automatic region detection.
+	return { id, options(0) };
 }
 
 void Program::videoRefresh(const uint32 *data, uint pitch, uint width, uint height)
@@ -284,10 +290,10 @@ void Program::videoRefresh(const uint32 *data, uint pitch, uint width, uint heig
 	{
 		uint word_pitch = pitch >> 2;
 
-		data += uint(round(width * BackendSpecific::overscan_crop_ratio_offset_x));
-		data += word_pitch * uint(round(height * BackendSpecific::overscan_crop_ratio_offset_y));
-		width = uint(round(width * BackendSpecific::overscan_crop_ratio_scale_x));
-		height = uint(round(height * BackendSpecific::overscan_crop_ratio_scale_y));
+		data += uint(round(width * overscan_crop_ratio_offset_x));
+		data += word_pitch * uint(round(height * overscan_crop_ratio_offset_y));
+		width = uint(round(width * overscan_crop_ratio_scale_x));
+		height = uint(round(height * overscan_crop_ratio_scale_y));
 	}
 
 	if (width != program->current_width || height != program->current_height)
@@ -424,12 +430,14 @@ RETRO_API void retro_get_system_av_info(struct retro_system_av_info *info)
 	if (!program->overscan)
 	{
 		info->geometry.base_width =
-			uint(round(info->geometry.base_width * BackendSpecific::overscan_crop_ratio_scale_x));
+			uint(round(info->geometry.base_width * program->overscan_crop_ratio_scale_x));
 		info->geometry.base_height =
-			uint(round(info->geometry.base_height * BackendSpecific::overscan_crop_ratio_scale_y));
+			uint(round(info->geometry.base_height * program->overscan_crop_ratio_scale_y));
 	}
 
 	info->timing.fps = res.refreshRate;
+
+	libretro_print(RETRO_LOG_INFO, "Reported video rate: %.4f Hz.\n", info->timing.fps);
 
 	// We control this.
 	info->timing.sample_rate = BackendSpecific::audio_rate;
@@ -605,6 +613,21 @@ RETRO_API bool retro_load_game(const retro_game_info *game)
 	if (!program->emulator->loaded())
 		return false;
 
+	if (retro_get_region() == RETRO_REGION_NTSC)
+	{
+		program->overscan_crop_ratio_offset_x = BackendSpecific::NTSC::overscan_crop_ratio_offset_x;
+		program->overscan_crop_ratio_offset_y = BackendSpecific::NTSC::overscan_crop_ratio_offset_y;
+		program->overscan_crop_ratio_scale_x = BackendSpecific::NTSC::overscan_crop_ratio_scale_x;
+		program->overscan_crop_ratio_scale_y = BackendSpecific::NTSC::overscan_crop_ratio_scale_y;
+	}
+	else
+	{
+		program->overscan_crop_ratio_offset_x = BackendSpecific::PAL::overscan_crop_ratio_offset_x;
+		program->overscan_crop_ratio_offset_y = BackendSpecific::PAL::overscan_crop_ratio_offset_y;
+		program->overscan_crop_ratio_scale_x = BackendSpecific::PAL::overscan_crop_ratio_scale_x;
+		program->overscan_crop_ratio_scale_y = BackendSpecific::PAL::overscan_crop_ratio_scale_y;
+	}
+
 	// Setup some defaults.
 	// TODO: Might want to use the option interface for these,
 	// but most of these seem better suited for shaders tbh ...
@@ -644,8 +667,8 @@ RETRO_API void retro_unload_game()
 
 RETRO_API unsigned retro_get_region()
 {
-	// This function isn't all that important, but according to byuu,
-	// less than 59 FPS would mean PAL to account for possible variations in the implementation.
+	// This function isn't all that important,
+	// but less than 59 FPS would mean PAL to account for possible variations in the implementation.
 	if (program && program->emulator)
 	{
 		if (program->emulator->videoInformation().refreshRate < 59.0f)
