@@ -12,6 +12,27 @@ static retro_log_printf_t libretro_print;
 #define ICARUS_LIBRARY
 #include "../../icarus/icarus.cpp"
 
+static string locate_libretro(string name)
+{
+	// Try libretro specific paths first ...
+	// This is relevant for special chip ROMs/BIOS, etc.
+	const char *sys = nullptr;
+	if (environ_cb && environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &sys) && sys)
+	{
+		string location = { sys, "/higan/", name };
+		if (inode::exists(location))
+			return location;
+	}
+
+	// If not, fall back to standard higan paths.
+	string location = { Path::config(), "higan/", name };
+	if (inode::exists(location))
+		return location;
+
+	directory::create({ Path::local(), "higan/" });
+	return { Path::local(), "higan/", name };
+}
+
 struct LibretroIcarus : Icarus
 {
 	LibretroIcarus()
@@ -78,29 +99,45 @@ struct LibretroIcarus : Icarus
 		imported_files.reset();
 	}
 
+	bool import_rom(const string &fake_path, const uint8_t *data, size_t size);
+
 	map<string, vector<uint8_t>> imported_files;
 };
 static LibretroIcarus icarus;
 
-static string locate_libretro(string name)
+bool LibretroIcarus::import_rom(const string &fake_path, const uint8_t *rom_data, size_t rom_size)
 {
-	// Try libretro specific paths first ...
-	// This is relevant for special chip ROMs/BIOS, etc.
-	const char *sys = nullptr;
-	if (environ_cb && environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &sys) && sys)
+	icarus.reset();
+	icarus.write(fake_path, rom_data, rom_size);
+
+	if (icarus.import(fake_path))
+		return true;
+
+	auto missing_files = missing();
+	if (!missing_files)
+		return false;
+
+	// If there are missing files, try to load them from disk, and append them in order to the ROM data in question.
+	// If that fails, bail out.
+	for (auto &rom : missing_files)
 	{
-		string location = { sys, "/higan/", name };
-		if (inode::exists(location))
-			return location;
+		libretro_print(RETRO_LOG_INFO, "ROM did not include missing file: %s.\n", static_cast<const char *>(rom));
+
+		auto &file = imported_files.find(fake_path).get();
+		auto path = locate_libretro(rom);
+		auto data = file::read(path);
+		if (!data)
+			return false;
+
+		libretro_print(RETRO_LOG_INFO, "Found missing ROM in: %s.\n", static_cast<const char *>(path));
+
+		size_t offset = file.size();
+		file.resize(offset + data.size());
+		memory::copy(file.data() + offset, data.data(), data.size());
 	}
 
-	// If not, fall back to standard higan paths.
-	string location = { Path::config(), "higan/", name };
-	if (inode::exists(location))
-		return location;
-
-	directory::create({ Path::local(), "higan/" });
-	return { Path::local(), "higan/", name };
+	// Try again.
+	return icarus.import(fake_path);
 }
 
 struct Program : Emulator::Platform
@@ -292,10 +329,12 @@ void Program::audioSample(const double *samples, uint channels)
 
 void Program::inputRumble(uint port, uint device, uint input, bool enable)
 {
+	// Might be useful for other cores.
 }
 
 uint Program::dipSettings(Markup::Node)
 {
+	// Might be useful for other cores.
 }
 
 void Program::notify(string text)
@@ -305,6 +344,7 @@ void Program::notify(string text)
 
 void Program::poll_once()
 {
+	// Poll as late as possible, frontend might also do it like this.
 	if (!program->polled)
 	{
 		input_poll();
@@ -507,19 +547,6 @@ RETRO_API bool retro_load_game(const retro_game_info *game)
 	}
 	else
 	{
-		// Import the game with Icarus.
-		// Create a fake path for Icarus to import.
-		// We need a sane extension so Icarus can dispatch to the right importer.
-		program->fake_game_path = { "game.", BackendSpecific::medium_type };
-		icarus.reset();
-		icarus.write(program->fake_game_path, static_cast<const uint8_t *>(game->data), game->size);
-
-		if (!icarus.import(program->fake_game_path))
-		{
-			libretro_print(RETRO_LOG_ERROR, "Failed to import game with Icarus.\n");
-			return false;
-		}
-
 		// Try to find appropriate paths for save data.
 		if (game->path)
 		{
@@ -553,6 +580,16 @@ RETRO_API bool retro_load_game(const retro_game_info *game)
 				directory::create(path);
 				program->medium_paths(emulator_medium->id) = path;
 			}
+		}
+
+		// Import the game with Icarus.
+		// Create a fake path for Icarus to import.
+		// We need a sane extension so Icarus can dispatch to the right importer.
+		program->fake_game_path = { "game.", BackendSpecific::medium_type };
+		if (!icarus.import_rom(program->fake_game_path, static_cast<const uint8_t *>(game->data), game->size))
+		{
+			libretro_print(RETRO_LOG_ERROR, "Failed to import game with Icarus.\n");
+			return false;
 		}
 	}
 
