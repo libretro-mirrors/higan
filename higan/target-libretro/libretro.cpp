@@ -554,7 +554,7 @@ RETRO_API bool retro_load_game(const retro_game_info *game)
 
 	if (loading_folder)
 	{
-		// If we try load a ROM file, assume this is inside a foltainer (typically called program.rom), and we should create a manifest.
+		// If we try to load a ROM file, assume this is inside a foltainer (typically called program.rom), and we should create a manifest.
 		// This seems to be the preferred way as the manifest format is not *that* stable.
 		program->medium_paths(emulator_medium->id) = Location::dir(game->path);
 		libretro_print(RETRO_LOG_INFO, "Trying to generate manifest for foltainer: %s.\n",
