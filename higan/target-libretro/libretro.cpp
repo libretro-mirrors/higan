@@ -127,7 +127,10 @@ bool LibretroIcarus::import_rom(const string &fake_path, const uint8_t *rom_data
 		auto path = locate_libretro(rom);
 		auto data = file::read(path);
 		if (!data)
+		{
+			libretro_print(RETRO_LOG_ERROR, "Could not find missing file: %s.\n", static_cast<const char *>(rom));
 			return false;
+		}
 
 		libretro_print(RETRO_LOG_INFO, "Found missing ROM in: %s.\n", static_cast<const char *>(path));
 
