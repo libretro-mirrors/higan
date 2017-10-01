@@ -6,6 +6,63 @@ static Emulator::Interface *create_emulator_interface()
 	return iface;
 }
 
+static uint get_special_id_from_path(uint default_id, const char *path)
+{
+	if (!path)
+		return default_id;
+
+	string p = path;
+	if (p.endsWith(".gb") || p.endsWith(".gbc"))
+		return SuperFamicom::ID::GameBoy;
+
+	return default_id;
+}
+
+static const char *get_default_id_extension(uint id)
+{
+	switch (id)
+	{
+		case SuperFamicom::ID::SuperFamicom:
+			return ".sfc";
+		case SuperFamicom::ID::GameBoy:
+		{
+			// This can be gb as well, but this path is only relevant as a fallback
+			// in the rare case that we don't know the path.
+			return ".gbc";
+		}
+		default:
+			return "";
+	}
+}
+
+static bool load_special_bios(uint id)
+{
+	if (id == SuperFamicom::ID::GameBoy)
+	{
+		// Find the Super Gameboy ROM here.
+		auto path = locate_libretro("SGB.sfc/program.rom");
+		if (!file::exists(path))
+		{
+			libretro_print(RETRO_LOG_ERROR, "Need to find Super GameBoy BIOS, but could not find it.\n");
+			return false;
+		}
+
+		program->medium_paths(SuperFamicom::ID::SuperFamicom) = Location::dir(path);
+		program->loaded_manifest(SuperFamicom::ID::SuperFamicom) =
+			plain_icarus.manifest(program->medium_paths(SuperFamicom::ID::SuperFamicom));
+
+		if (!program->loaded_manifest(SuperFamicom::ID::SuperFamicom))
+		{
+			libretro_print(RETRO_LOG_ERROR, "Could not create manifest for Super GameBoy BIOS.\n");
+			return false;
+		}
+
+		return true;
+	}
+	else
+		return true;
+}
+
 #define RETRO_DEVICE_JOYPAD_MULTITAP       RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_JOYPAD, 0)
 #define RETRO_DEVICE_LIGHTGUN_SUPER_SCOPE  RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_LIGHTGUN, 0)
 #define RETRO_DEVICE_LIGHTGUN_JUSTIFIER    RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_LIGHTGUN, 1)
@@ -262,7 +319,7 @@ static void set_controller_ports(unsigned port, unsigned device)
 
 namespace BackendSpecific
 {
-static const char *extensions = "sfc|smc|bml|rom"; // Icarus supports headered ROMs as well.
+static const char *extensions = "sfc|smc|gb|gbc|bml|rom"; // Icarus supports headered ROMs as well.
 static const char *medium_type = "sfc";
 static const char *name = "higan (Super Famicom) WIP";
 static const uint system_id = SuperFamicom::ID::System;

@@ -1,9 +1,13 @@
 ifeq ($(core),sfc)
   corename := sfc
   include sfc/GNUmakefile
+  include gb/GNUmakefile
+  flags += -DSFC_SUPERGAMEBOY
 else ifeq ($(core),)
   corename := sfc
   include sfc/GNUmakefile
+  include gb/GNUmakefile
+  flags += -DSFC_SUPERGAMEBOY
 endif
 
 ifeq ($(platform),windows)
@@ -13,13 +17,11 @@ else ifeq ($(platform),macosx)
 else
   name := higan_$(corename)_libretro.so
 endif
-#flags += -DSFC_SUPERGAMEBOY
 
 #include fc/GNUmakefile
 #include ms/GNUmakefile
 #include md/GNUmakefile
 #include pce/GNUmakefile
-#include gb/GNUmakefile
 #include gba/GNUmakefile
 #include ws/GNUmakefile
 include processor/GNUmakefile
