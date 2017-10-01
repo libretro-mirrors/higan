@@ -19,7 +19,7 @@ static string locate_libretro(string name)
 	const char *sys = nullptr;
 	if (environ_cb && environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &sys) && sys)
 	{
-		string location = { sys, "/higan/", name };
+		string location = { sys, "/", name };
 		if (inode::exists(location))
 			return location;
 	}
