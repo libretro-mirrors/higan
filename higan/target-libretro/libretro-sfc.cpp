@@ -40,7 +40,15 @@ static bool load_special_bios(uint id)
 	if (id == SuperFamicom::ID::GameBoy)
 	{
 		// Find the Super Gameboy ROM here.
+		libretro_print(RETRO_LOG_INFO, "Trying to find SGB.sfc/program.rom in system directories.\n");
 		auto path = locate_libretro("SGB.sfc/program.rom");
+
+		if (!file::exists(path))
+		{
+			libretro_print(RETRO_LOG_INFO, "Trying to find Super GameBoy.sfc/program.rom in system directories.\n");
+			path = locate_libretro("Super GameBoy.sfc/program.rom");
+		}
+
 		if (!file::exists(path))
 		{
 			libretro_print(RETRO_LOG_ERROR, "Need to find Super GameBoy BIOS, but could not find it.\n");
