@@ -189,6 +189,7 @@ Program::Program()
 {
 	Emulator::platform = this;
 	emulator = create_emulator_interface();
+	flush_variables(emulator);
 }
 
 Program::~Program()
@@ -456,6 +457,8 @@ RETRO_API void retro_reset()
 
 RETRO_API void retro_run()
 {
+	check_variables(program->emulator);
+
 	program->polled = false;
 	program->has_cached_serialize = false;
 	program->emulator->run();

@@ -1,4 +1,61 @@
 #include <sfc/interface/interface.hpp>
+
+enum class VideoMode
+{
+	FullRes,
+	MergeScanlines,
+	HalfRes
+};
+static VideoMode video_mode = VideoMode::FullRes;
+
+static void flush_variables(Emulator::Interface *iface)
+{
+	retro_variable variable = { "higan_sfc_internal_resolution", nullptr };
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &variable) && variable.value)
+	{
+		if (strcmp(variable.value, "512x480(448)") == 0)
+			video_mode = VideoMode::FullRes;
+		else if (strstr(variable.value, "512x240(224)") == 0)
+			video_mode = VideoMode::MergeScanlines;
+		else if (strstr(variable.value, "256x240(224)") == 0)
+			video_mode = VideoMode::HalfRes;
+	}
+
+	variable = { "higan_sfc_color_emulation", nullptr };
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &variable) && variable.value)
+	{
+		if (strcmp(variable.value, "ON") == 0)
+			iface->set("Color Emulation", true);
+		else if (strcmp(variable.value, "OFF") == 0)
+			iface->set("Color Emulation", false);
+	}
+
+	variable = { "higan_sfc_blur_emulation", nullptr };
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &variable) && variable.value)
+	{
+		if (strcmp(variable.value, "ON") == 0)
+			iface->set("Blur Emulation", true);
+		else if (strcmp(variable.value, "OFF") == 0)
+			iface->set("Blur Emulation", false);
+	}
+
+	variable = { "higan_sfc_scanline_emulation", nullptr };
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &variable) && variable.value)
+	{
+		if (strcmp(variable.value, "ON") == 0)
+			iface->set("Scanline Emulation", true);
+		else if (strcmp(variable.value, "OFF") == 0)
+			iface->set("Scanline Emulation", false);
+	}
+}
+
+static void check_variables(Emulator::Interface *iface)
+{
+	bool updated = false;
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated) && updated)
+		flush_variables(iface);
+}
+
 static Emulator::Interface *create_emulator_interface()
 {
 	auto *iface = new SuperFamicom::Interface;
@@ -174,6 +231,15 @@ static void set_environment_info(retro_environment_t cb)
 	};
 
 	cb(RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS, const_cast<retro_input_descriptor *>(desc));
+
+	static const retro_variable vars[] = {
+		{ "higan_sfc_internal_resolution", "Internal resolution; 512x480(448)|512x240(224)|256x240(224)" },
+		{ "higan_sfc_color_emulation", "Color emulation; OFF|ON" },
+		{ "higan_sfc_blur_emulation", "Blur emulation; OFF|ON" },
+		{ "higan_sfc_scanline_emulation", "Scanline emulation; OFF|ON" },
+		{ nullptr },
+	};
+	cb(RETRO_ENVIRONMENT_SET_VARIABLES, const_cast<retro_variable *>(vars));
 }
 
 // Normally, these files are loaded from an external folder after Higan is installed,
