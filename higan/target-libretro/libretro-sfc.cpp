@@ -329,7 +329,7 @@ namespace BackendSpecific
 {
 static const char *extensions = "sfc|smc|gb|gbc|bml|rom"; // Icarus supports headered ROMs as well.
 static const char *medium_type = "sfc";
-static const char *name = "higan (Super Famicom) WIP";
+static const char *name = "higan (Super Famicom) Accuracy";
 static const uint system_id = SuperFamicom::ID::System;
 static const double audio_rate = 44100.0; // MSU-1 is 44.1k CD, so use that.
 
