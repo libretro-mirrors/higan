@@ -8,6 +8,78 @@ enum class VideoMode
 };
 static VideoMode video_mode = VideoMode::FullRes;
 
+static void adjust_video_resolution(uint &width, uint &height, float &pixel_aspect_correction)
+{
+	switch (video_mode)
+	{
+		case VideoMode::MergeScanlines:
+			height >>= 1;
+			pixel_aspect_correction = 0.5f;
+			break;
+
+		case VideoMode::HalfRes:
+			width >>= 1;
+			height >>= 1;
+			pixel_aspect_correction = 1.0f;
+			break;
+
+		default:
+			pixel_aspect_correction = 1.0f;
+			break;
+	}
+}
+
+static void video_output(const uint32 *data, uint width, uint height, uint pitch)
+{
+	if (video_mode == VideoMode::FullRes)
+	{
+		video_cb(data, width, height, pitch);
+		return;
+	}
+
+	uint word_pitch = pitch >> 2;
+	// Skip every other scanline.
+	word_pitch <<= 1;
+
+	retro_framebuffer fb = {};
+	fb.width = width;
+	fb.height = height;
+	fb.access_flags = RETRO_MEMORY_ACCESS_WRITE;
+
+	uint dst_pitch;
+	void *dst_buffer;
+
+	// Use SOFTWARE_FRAMEBUFFER to avoid an extra copy if possible.
+	if (environ_cb(RETRO_ENVIRONMENT_GET_CURRENT_SOFTWARE_FRAMEBUFFER, &fb) && fb.format == RETRO_PIXEL_FORMAT_XRGB8888)
+	{
+		dst_buffer = fb.data;
+		dst_pitch = fb.pitch;
+	}
+	else
+	{
+		static uint32 scratch[512 * 240];
+		dst_buffer = scratch;
+		dst_pitch = width * sizeof(uint32);
+	}
+
+	if (video_mode == VideoMode::MergeScanlines)
+	{
+		auto *dst = static_cast<uint8 *>(dst_buffer);
+		for (uint y = 0; y < height; y++, dst += dst_pitch, data += word_pitch)
+			memcpy(dst, data, width * sizeof(uint32));
+	}
+	else
+	{
+		auto *dst = static_cast<uint32 *>(dst_buffer);
+		auto pitch = dst_pitch >> 2;
+		for (uint y = 0; y < height; y++, dst += pitch, data += word_pitch)
+			for (uint x = 0, src_x = 0; x < width; x++, src_x += 2)
+				dst[x] = data[src_x];
+	}
+
+	video_cb(dst_buffer, width, height, dst_pitch);
+}
+
 static void flush_variables(Emulator::Interface *iface)
 {
 	retro_variable variable = { "higan_sfc_internal_resolution", nullptr };
@@ -15,9 +87,9 @@ static void flush_variables(Emulator::Interface *iface)
 	{
 		if (strcmp(variable.value, "512x480(448)") == 0)
 			video_mode = VideoMode::FullRes;
-		else if (strstr(variable.value, "512x240(224)") == 0)
+		else if (strcmp(variable.value, "512x240(224)") == 0)
 			video_mode = VideoMode::MergeScanlines;
-		else if (strstr(variable.value, "256x240(224)") == 0)
+		else if (strcmp(variable.value, "256x240(224)") == 0)
 			video_mode = VideoMode::HalfRes;
 	}
 
@@ -395,7 +467,7 @@ namespace BackendSpecific
 {
 static const char *extensions = "sfc|smc|gb|gbc|bml|rom"; // Icarus supports headered ROMs as well.
 static const char *medium_type = "sfc";
-static const char *name = "higan (Super Famicom) Accuracy";
+static const char *name = "higan (Super Famicom Accuracy)";
 static const uint system_id = SuperFamicom::ID::System;
 static const double audio_rate = 44100.0; // MSU-1 is 44.1k CD, so use that.
 

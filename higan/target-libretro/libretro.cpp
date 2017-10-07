@@ -297,23 +297,22 @@ void Program::videoRefresh(const uint32 *data, uint pitch, uint width, uint heig
 		height = uint(round(height * overscan_crop_ratio_scale_y));
 	}
 
+	float par;
+	adjust_video_resolution(width, height, par);
+
 	if (width != program->current_width || height != program->current_height)
 	{
 		// If internal resolution changes, notify the frontend if it cares about it.
 		retro_game_geometry geom = {};
 		geom.base_width = width;
 		geom.base_height = height;
-		geom.aspect_ratio = emulator->videoInformation().aspectCorrection;
+		geom.aspect_ratio = par * (float(width) / float(height)) * emulator->videoInformation().aspectCorrection;
 		program->current_width = width;
 		program->current_height = height;
 		environ_cb(RETRO_ENVIRONMENT_SET_GEOMETRY, &geom);
 	}
 
-	// On at least SNES, this will be pixel doubled in most cases.
-	// We could expose a core option to blend down to 256x224 or similar,
-	// but I'd rather that be handled by special downsampling shaders.
-
-	video_cb(data, width, height, pitch);
+	video_output(data, width, height, pitch);
 }
 
 // Double the fun!
@@ -427,7 +426,6 @@ RETRO_API void retro_get_system_av_info(struct retro_system_av_info *info)
 	info->geometry.base_height = res.height;
 	info->geometry.max_width = res.internalWidth;
 	info->geometry.max_height = res.internalHeight;
-	info->geometry.aspect_ratio = res.aspectCorrection;
 
 	if (!program->overscan)
 	{
@@ -436,6 +434,9 @@ RETRO_API void retro_get_system_av_info(struct retro_system_av_info *info)
 		info->geometry.base_height =
 			uint(round(info->geometry.base_height * program->overscan_crop_ratio_scale_y));
 	}
+
+	// Adjust for pixel aspect ratio.
+	info->geometry.aspect_ratio = res.aspectCorrection * float(info->geometry.base_width) / float(info->geometry.base_height);
 
 	info->timing.fps = res.refreshRate;
 
