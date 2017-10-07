@@ -7,6 +7,7 @@ enum class VideoMode
 	HalfRes
 };
 static VideoMode video_mode = VideoMode::FullRes;
+static string sgb_path;
 
 static void adjust_video_resolution(uint &width, uint &height, float &pixel_aspect_correction)
 {
@@ -119,6 +120,10 @@ static void flush_variables(Emulator::Interface *iface)
 		else if (strcmp(variable.value, "OFF") == 0)
 			iface->set("Scanline Emulation", false);
 	}
+
+	variable = { "higan_sfc_sgb_bios", nullptr };
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &variable) && variable.value)
+		sgb_path = variable.value;
 }
 
 static void check_variables(Emulator::Interface *iface)
@@ -169,8 +174,15 @@ static bool load_special_bios(uint id)
 	if (id == SuperFamicom::ID::GameBoy)
 	{
 		// Find the Super Gameboy ROM here.
-		libretro_print(RETRO_LOG_INFO, "Trying to find SGB.sfc/program.rom in system directories.\n");
-		auto path = locate_libretro("SGB.sfc/program.rom");
+		string config_path = { sgb_path, "program.rom" };
+		libretro_print(RETRO_LOG_INFO, "Trying to find %s in system directories.\n", static_cast<const char *>(config_path));
+		auto path = locate_libretro({ sgb_path, "/program.rom" });
+
+		if (!file::exists(path))
+		{
+			libretro_print(RETRO_LOG_INFO, "Trying to find SGB.sfc/program.rom in system directories.\n");
+			path = locate_libretro("SGB.sfc/program.rom");
+		}
 
 		if (!file::exists(path))
 		{
@@ -309,6 +321,7 @@ static void set_environment_info(retro_environment_t cb)
 		{ "higan_sfc_color_emulation", "Color emulation; OFF|ON" },
 		{ "higan_sfc_blur_emulation", "Blur emulation; OFF|ON" },
 		{ "higan_sfc_scanline_emulation", "Scanline emulation; OFF|ON" },
+		{ "higan_sfc_sgb_bios", "Preferred Super GameBoy BIOS (restart); SGB1.sfc/|SGB2.sfc/" },
 		{ nullptr },
 	};
 	cb(RETRO_ENVIRONMENT_SET_VARIABLES, const_cast<retro_variable *>(vars));
