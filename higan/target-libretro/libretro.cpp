@@ -164,17 +164,11 @@ struct Program : Emulator::Platform
 
 	bool failed = false;
 	bool polled = false;
-	bool overscan = false;
 
 	void poll_once();
 
 	uint current_width = 0;
 	uint current_height = 0;
-
-	double overscan_crop_ratio_offset_x;
-	double overscan_crop_ratio_offset_y;
-	double overscan_crop_ratio_scale_x;
-	double overscan_crop_ratio_scale_y;
 };
 
 static Program *program = nullptr;
@@ -204,6 +198,12 @@ string Program::path(uint id)
 
 vfs::shared::file Program::open(uint id, string name, vfs::file::mode mode, bool required)
 {
+	// Be nice to other implementations.
+	// Canonically, the srm extension is used for save ram.
+	// Only do this for non-foltainer loads, because for foltainers, we should be compatible with Higan proper.
+	if (!loaded_manifest(id) && id != BackendSpecific::system_id && name == "save.ram")
+		name = "srm";
+
 	libretro_print(RETRO_LOG_INFO, "Accessing data from %u: %s (required: %s)\n",
 			id, static_cast<const char *>(name), required ? "yes" : "no");
 
@@ -287,18 +287,8 @@ Emulator::Platform::Load Program::load(uint id, string name, string, string_vect
 
 void Program::videoRefresh(const uint32 *data, uint pitch, uint width, uint height)
 {
-	if (!program->overscan)
-	{
-		uint word_pitch = pitch >> 2;
-
-		data += uint(round(width * overscan_crop_ratio_offset_x));
-		data += word_pitch * uint(round(height * overscan_crop_ratio_offset_y));
-		width = uint(round(width * overscan_crop_ratio_scale_x));
-		height = uint(round(height * overscan_crop_ratio_scale_y));
-	}
-
 	float par;
-	adjust_video_resolution(width, height, par);
+	data += adjust_video_resolution(width, height, pitch, par) >> 2;
 
 	if (width != program->current_width || height != program->current_height)
 	{
@@ -306,7 +296,8 @@ void Program::videoRefresh(const uint32 *data, uint pitch, uint width, uint heig
 		retro_game_geometry geom = {};
 		geom.base_width = width;
 		geom.base_height = height;
-		geom.aspect_ratio = par * (float(width) / float(height)) * emulator->videoInformation().aspectCorrection;
+		geom.aspect_ratio = emulator->videoInformation().aspectCorrection * par *
+			(float(width) / float(height));
 		program->current_width = width;
 		program->current_height = height;
 		environ_cb(RETRO_ENVIRONMENT_SET_GEOMETRY, &geom);
@@ -422,21 +413,18 @@ RETRO_API void retro_get_system_info(retro_system_info *info)
 RETRO_API void retro_get_system_av_info(struct retro_system_av_info *info)
 {
 	auto res = program->emulator->videoInformation();
-	info->geometry.base_width = res.width;
-	info->geometry.base_height = res.height;
+	info->geometry.base_width = res.internalWidth;
+	info->geometry.base_height = res.internalHeight;
 	info->geometry.max_width = res.internalWidth;
 	info->geometry.max_height = res.internalHeight;
 
-	if (!program->overscan)
-	{
-		info->geometry.base_width =
-			uint(round(info->geometry.base_width * program->overscan_crop_ratio_scale_x));
-		info->geometry.base_height =
-			uint(round(info->geometry.base_height * program->overscan_crop_ratio_scale_y));
-	}
+	float par;
+	uint pitch = 0;
+	adjust_video_resolution(info->geometry.base_width, info->geometry.base_height, pitch, par);
 
 	// Adjust for pixel aspect ratio.
-	info->geometry.aspect_ratio = res.aspectCorrection * float(info->geometry.base_width) / float(info->geometry.base_height);
+	info->geometry.aspect_ratio = res.aspectCorrection * par *
+		float(info->geometry.base_width) / float(info->geometry.base_height);
 
 	info->timing.fps = res.refreshRate;
 
@@ -542,9 +530,6 @@ RETRO_API bool retro_load_game(const retro_game_info *game)
 	// not the SFC cart.
 	uint id = get_special_id_from_path(emulator_medium->id, game->path);
 
-	if (!environ_cb(RETRO_ENVIRONMENT_GET_OVERSCAN, &program->overscan))
-		program->overscan = false;
-
 	// Get the folder of the system directory.
 	// Generally, this will go unused, but it will be relevant for some backends.
 	program->medium_paths(BackendSpecific::system_id) = locate_libretro({ emulator_medium->name, ".sys/" });
@@ -596,11 +581,14 @@ RETRO_API bool retro_load_game(const retro_game_info *game)
 			auto base_name = string(game->path);
 			string save_path;
 
+			auto suffix = Location::suffix(base_name);
+			auto base = Location::base(base_name);
+
 			const char *save = nullptr;
 			if (environ_cb && environ_cb(RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY, &save) && save)
-				save_path = { save, "/", Location::base(base_name), "." };
+				save_path = { save, "/", base.trimRight(suffix, 1L), "." };
 			else
-				save_path = { base_name.trimRight(Location::suffix(base_name)), "." };
+				save_path = { base_name.trimRight(suffix, 1L), "." };
 
 			program->medium_paths(id) = save_path;
 		}
@@ -650,21 +638,6 @@ RETRO_API bool retro_load_game(const retro_game_info *game)
 
 	if (!program->emulator->loaded())
 		return false;
-
-	if (retro_get_region() == RETRO_REGION_NTSC)
-	{
-		program->overscan_crop_ratio_offset_x = BackendSpecific::NTSC::overscan_crop_ratio_offset_x;
-		program->overscan_crop_ratio_offset_y = BackendSpecific::NTSC::overscan_crop_ratio_offset_y;
-		program->overscan_crop_ratio_scale_x = BackendSpecific::NTSC::overscan_crop_ratio_scale_x;
-		program->overscan_crop_ratio_scale_y = BackendSpecific::NTSC::overscan_crop_ratio_scale_y;
-	}
-	else
-	{
-		program->overscan_crop_ratio_offset_x = BackendSpecific::PAL::overscan_crop_ratio_offset_x;
-		program->overscan_crop_ratio_offset_y = BackendSpecific::PAL::overscan_crop_ratio_offset_y;
-		program->overscan_crop_ratio_scale_x = BackendSpecific::PAL::overscan_crop_ratio_scale_x;
-		program->overscan_crop_ratio_scale_y = BackendSpecific::PAL::overscan_crop_ratio_scale_y;
-	}
 
 	// Setup some defaults.
 	// TODO: Might want to use the option interface for these,

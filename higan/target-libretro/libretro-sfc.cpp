@@ -4,43 +4,76 @@ enum class VideoMode
 {
 	FullRes,
 	MergeScanlines,
-	HalfRes
+	HalfRes,
+	FullResCrop,
+	MergeScanlinesCrop,
+	HalfResCrop
 };
 static VideoMode video_mode = VideoMode::FullRes;
 static string sgb_path;
 
-static void adjust_video_resolution(uint &width, uint &height, float &pixel_aspect_correction)
+static uint adjust_video_resolution(uint &width, uint &height, uint &pitch, float &pixel_aspect_correction)
 {
+	uint old_height = height;
+
 	switch (video_mode)
 	{
 		case VideoMode::MergeScanlines:
 			height >>= 1;
+			pitch <<= 1;
 			pixel_aspect_correction = 0.5f;
-			break;
+			return 0;
+
+		case VideoMode::MergeScanlinesCrop:
+			old_height >>= 1;
+			height = 224;
+			pitch <<= 1;
+			pixel_aspect_correction = 0.5f;
+			return pitch * ((old_height - 224) >> 1);
 
 		case VideoMode::HalfRes:
+			old_height >>= 1;
 			width >>= 1;
 			height >>= 1;
+			pitch <<= 1;
 			pixel_aspect_correction = 1.0f;
-			break;
+			return 0;
 
-		default:
+		case VideoMode::HalfResCrop:
+			old_height >>= 1;
+			width >>= 1;
+			height = 224;
+			pitch <<= 1;
 			pixel_aspect_correction = 1.0f;
-			break;
+			return pitch * ((old_height - 224) >> 1);
+
+		case VideoMode::FullRes:
+			pixel_aspect_correction = 1.0f;
+			return 0;
+
+		case VideoMode::FullResCrop:
+			pixel_aspect_correction = 1.0f;
+			height = 448;
+			return pitch * ((old_height - 448) >> 1);
 	}
 }
 
 static void video_output(const uint32 *data, uint width, uint height, uint pitch)
 {
-	if (video_mode == VideoMode::FullRes)
+	switch (video_mode)
 	{
-		video_cb(data, width, height, pitch);
-		return;
+		case VideoMode::FullRes:
+		case VideoMode::FullResCrop:
+		case VideoMode::MergeScanlines:
+		case VideoMode::MergeScanlinesCrop:
+			video_cb(data, width, height, pitch);
+			return;
+
+		default:
+			break;
 	}
 
 	uint word_pitch = pitch >> 2;
-	// Skip every other scanline.
-	word_pitch <<= 1;
 
 	retro_framebuffer fb = {};
 	fb.width = width;
@@ -58,25 +91,16 @@ static void video_output(const uint32 *data, uint width, uint height, uint pitch
 	}
 	else
 	{
-		static uint32 scratch[512 * 240];
+		static uint32 scratch[256 * 240];
 		dst_buffer = scratch;
 		dst_pitch = width * sizeof(uint32);
 	}
 
-	if (video_mode == VideoMode::MergeScanlines)
-	{
-		auto *dst = static_cast<uint8 *>(dst_buffer);
-		for (uint y = 0; y < height; y++, dst += dst_pitch, data += word_pitch)
-			memcpy(dst, data, width * sizeof(uint32));
-	}
-	else
-	{
-		auto *dst = static_cast<uint32 *>(dst_buffer);
-		auto pitch = dst_pitch >> 2;
-		for (uint y = 0; y < height; y++, dst += pitch, data += word_pitch)
-			for (uint x = 0, src_x = 0; x < width; x++, src_x += 2)
-				dst[x] = data[src_x];
-	}
+	auto *dst = static_cast<uint32 *>(dst_buffer);
+	auto dst_pitch_word = dst_pitch >> 2;
+	for (uint y = 0; y < height; y++, dst += dst_pitch_word, data += word_pitch)
+		for (uint x = 0, src_x = 0; x < width; x++, src_x += 2)
+			dst[x] = data[src_x];
 
 	video_cb(dst_buffer, width, height, dst_pitch);
 }
@@ -86,12 +110,18 @@ static void flush_variables(Emulator::Interface *iface)
 	retro_variable variable = { "higan_sfc_internal_resolution", nullptr };
 	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &variable) && variable.value)
 	{
-		if (strcmp(variable.value, "512x480(448)") == 0)
+		if (strcmp(variable.value, "512x480") == 0)
 			video_mode = VideoMode::FullRes;
-		else if (strcmp(variable.value, "512x240(224)") == 0)
+		else if (strcmp(variable.value, "512x448") == 0)
+			video_mode = VideoMode::FullResCrop;
+		else if (strcmp(variable.value, "512x240") == 0)
 			video_mode = VideoMode::MergeScanlines;
-		else if (strcmp(variable.value, "256x240(224)") == 0)
+		else if (strcmp(variable.value, "512x224") == 0)
+			video_mode = VideoMode::MergeScanlinesCrop;
+		else if (strcmp(variable.value, "256x240") == 0)
 			video_mode = VideoMode::HalfRes;
+		else if (strcmp(variable.value, "256x224") == 0)
+			video_mode = VideoMode::HalfResCrop;
 	}
 
 	variable = { "higan_sfc_color_emulation", nullptr };
@@ -317,7 +347,7 @@ static void set_environment_info(retro_environment_t cb)
 	cb(RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS, const_cast<retro_input_descriptor *>(desc));
 
 	static const retro_variable vars[] = {
-		{ "higan_sfc_internal_resolution", "Internal resolution; 512x480(448)|512x240(224)|256x240(224)" },
+		{ "higan_sfc_internal_resolution", "Internal resolution; 512x480|512x448|512x240|512x224|256x240|256x224" },
 		{ "higan_sfc_color_emulation", "Color emulation; OFF|ON" },
 		{ "higan_sfc_blur_emulation", "Blur emulation; OFF|ON" },
 		{ "higan_sfc_scanline_emulation", "Scanline emulation; OFF|ON" },
@@ -483,24 +513,5 @@ static const char *medium_type = "sfc";
 static const char *name = "higan (Super Famicom Accuracy)";
 static const uint system_id = SuperFamicom::ID::System;
 static const double audio_rate = 44100.0; // MSU-1 is 44.1k CD, so use that.
-
-// TODO: Get this exposed in Emulator::Interface?
-namespace NTSC
-{
-// Canonically, SNES video output is 256x224.
-static const double overscan_crop_ratio_offset_x = 0.0;
-static const double overscan_crop_ratio_offset_y = 0.5 * (240.0 - 224.0) / 240.0;
-static const double overscan_crop_ratio_scale_x = 1.0;
-static const double overscan_crop_ratio_scale_y = 224.0 / 240.0;
-}
-
-namespace PAL
-{
-// Use full-res on PAL.
-static const double overscan_crop_ratio_offset_x = 0.0;
-static const double overscan_crop_ratio_offset_y = 0.0;
-static const double overscan_crop_ratio_scale_x = 1.0;
-static const double overscan_crop_ratio_scale_y = 1.0;
-}
 }
 
