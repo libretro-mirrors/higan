@@ -20,6 +20,7 @@ static string locate_libretro(string name)
 	if (environ_cb && environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &sys) && sys)
 	{
 		string location = { sys, "/", name };
+		location = location.transform("\\", "/");
 		if (inode::exists(location))
 			return location;
 	}
@@ -534,15 +535,19 @@ RETRO_API bool retro_load_game(const retro_game_info *game)
 	// Generally, this will go unused, but it will be relevant for some backends.
 	program->medium_paths(BackendSpecific::system_id) = locate_libretro({ emulator_medium->name, ".sys/" });
 
+	string game_path;
+	if (game->path)
+		game_path = string(game->path).transform("\\", "/");
+
 	// TODO: Can we detect more robustly if we have a BML loaded from memory?
 	// If we don't have a path (game loaded from pure VFS for example), we cannot use manifests.
-	bool loading_manifest = game->path && string(game->path).endsWith(".bml");
-	bool loading_folder = game->path && string(game->path).endsWith(".rom");
+	bool loading_manifest = game_path && game_path.endsWith(".bml");
+	bool loading_folder = game_path && game_path.endsWith(".rom");
 
 	// If we're loading from a foltainer, the ID will depend on the folder extension.
 	if (loading_manifest || loading_folder)
 	{
-		auto dir = Location::dir(game->path).trimRight("/", 1L);
+		auto dir = Location::dir(game_path).trimRight("/", 1L);
 		id = get_special_id_from_path(emulator_medium->id, dir);
 	}
 
@@ -552,7 +557,7 @@ RETRO_API bool retro_load_game(const retro_game_info *game)
 	{
 		// If we try to load a ROM file, assume this is inside a foltainer (typically called program.rom), and we should create a manifest.
 		// This seems to be the preferred way as the manifest format is not *that* stable.
-		program->medium_paths(id) = Location::dir(game->path);
+		program->medium_paths(id) = Location::dir(game_path);
 		libretro_print(RETRO_LOG_INFO, "Trying to generate manifest for foltainer: %s.\n",
 				static_cast<const char *>(program->medium_paths(id)));
 
@@ -570,15 +575,15 @@ RETRO_API bool retro_load_game(const retro_game_info *game)
 	else if (loading_manifest)
 	{
 		// Load ROM and RAM from the directory.
-		program->medium_paths(id) = Location::dir(game->path);
+		program->medium_paths(id) = Location::dir(game_path);
 		program->loaded_manifest(id) = string_view(static_cast<const char *>(game->data), game->size);
 	}
 	else
 	{
 		// Try to find appropriate paths for save data.
-		if (game->path)
+		if (game_path)
 		{
-			auto base_name = string(game->path);
+			auto base_name = game_path;
 			string save_path;
 
 			auto suffix = Location::suffix(base_name);
@@ -586,7 +591,7 @@ RETRO_API bool retro_load_game(const retro_game_info *game)
 
 			const char *save = nullptr;
 			if (environ_cb && environ_cb(RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY, &save) && save)
-				save_path = { save, "/", base.trimRight(suffix, 1L), "." };
+				save_path = { string(save).transform("\\", "/"), "/", base.trimRight(suffix, 1L), "." };
 			else
 				save_path = { base_name.trimRight(suffix, 1L), "." };
 
@@ -616,7 +621,7 @@ RETRO_API bool retro_load_game(const retro_game_info *game)
 		// Import the game with Icarus.
 		// Create a fake path for Icarus to import.
 		// We need a sane extension so Icarus can dispatch to the right importer.
-		string ext = game->path ? Location::suffix(game->path) : string(get_default_id_extension(id));
+		string ext = game_path ? Location::suffix(game_path) : string(get_default_id_extension(id));
 		string fake_game_path = { "game", ext };
 		if (!icarus(id).import_rom(fake_game_path, static_cast<const uint8_t *>(game->data), game->size))
 		{
