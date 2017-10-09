@@ -12,7 +12,7 @@ endif
 
 ifeq ($(platform),windows)
   name := higan_$(corename)_libretro.dll
-else ifeq ($(platform),macosx)
+else ifeq ($(platform),macos)
   name := higan_$(corename)_libretro.dylib
 else
   name := higan_$(corename)_libretro.so
