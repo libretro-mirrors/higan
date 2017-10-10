@@ -35,5 +35,5 @@ obj/libretro_$(corename).o: target-libretro/libretro.cpp
 
 # targets
 build: $(objects)
-	$(strip $(compiler) -o out/$(name) $(objects) $(link) -Wl,--version-script=target-libretro/link.T -Wl,--no-undefined)
+	$(strip $(compiler) -o out/$(name) $(objects) $(link))
 
