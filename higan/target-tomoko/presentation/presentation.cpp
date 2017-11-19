@@ -42,7 +42,8 @@ Presentation::Presentation() {
   }
 
   systemMenu.setText("System").setVisible(false);
-  reloadSystem.setText("Power Cycle").onActivate([&] { program->powerCycle(); });
+  resetSystem.setText("Soft Reset").onActivate([&] { program->softReset(); });
+  powerSystem.setText("Power Cycle").onActivate([&] { program->powerCycle(); });
   unloadSystem.setText("Unload").onActivate([&] { program->unloadMedium(); });
 
   settingsMenu.setText("Settings");
@@ -133,6 +134,7 @@ Presentation::Presentation() {
   cheatEditor.setText("Cheat Editor ...").onActivate([&] { toolsManager->show(0); });
   stateManager.setText("State Manager ...").onActivate([&] { toolsManager->show(1); });
   manifestViewer.setText("Manifest Viewer ...").onActivate([&] { toolsManager->show(2); });
+  gameNotes.setText("Game Notes ...").onActivate([&] { toolsManager->show(3); });
 
   helpMenu.setText("Help");
   documentation.setText("Documentation ...").onActivate([&] {
@@ -213,6 +215,7 @@ auto Presentation::updateEmulator() -> void {
   }
 
   systemMenuSeparatorPorts.setVisible(inputPort1.visible() || inputPort2.visible() || inputPort3.visible());
+  resetSystem.setVisible(emulator->information.resettable);
 
   emulator->set("Blur Emulation", blurEmulation.checked());
   emulator->set("Color Emulation", colorEmulation.checked());

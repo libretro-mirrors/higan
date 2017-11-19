@@ -23,7 +23,8 @@ struct Presentation : Window {
       Menu inputPort2{&systemMenu};
       Menu inputPort3{&systemMenu};
       MenuSeparator systemMenuSeparatorPorts{&systemMenu};
-      MenuItem reloadSystem{&systemMenu};
+      MenuItem resetSystem{&systemMenu};
+      MenuItem powerSystem{&systemMenu};
       MenuItem unloadSystem{&systemMenu};
     Menu settingsMenu{&menuBar};
       Menu videoScaleMenu{&settingsMenu};
@@ -66,6 +67,7 @@ struct Presentation : Window {
       MenuItem cheatEditor{&toolsMenu};
       MenuItem stateManager{&toolsMenu};
       MenuItem manifestViewer{&toolsMenu};
+      MenuItem gameNotes{&toolsMenu};
     Menu helpMenu{&menuBar};
       MenuItem documentation{&helpMenu};
       MenuItem credits{&helpMenu};

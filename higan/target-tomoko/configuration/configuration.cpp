@@ -56,6 +56,9 @@ Settings::Settings() {
   set("Input/FocusLoss/Pause", false);
   set("Input/FocusLoss/AllowInput", false);
 
+  set("Emulation/AutoSaveMemory/Enable", true);
+  set("Emulation/AutoSaveMemory/Interval", 30);
+
   set("Crashed", false);
 }
 

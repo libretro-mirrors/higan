@@ -43,4 +43,9 @@ AdvancedSettings::AdvancedSettings(TabFrame* parent) : TabFrameItem(parent) {
   ignoreManifests.setText("Ignore Manifests").setChecked(settings["Library/IgnoreManifests"].boolean()).onToggle([&] {
     settings["Library/IgnoreManifests"].setValue(ignoreManifests.checked());
   });
+
+  otherLabel.setText("Other").setFont(Font().setBold());
+  autoSaveMemory.setText("Auto-Save Memory Periodically").setChecked(settings["Emulation/AutoSaveMemory/Enable"].boolean()).onToggle([&] {
+    settings["Emulation/AutoSaveMemory/Enable"].setValue(autoSaveMemory.checked());
+  });
 }
