@@ -442,7 +442,7 @@ RETRO_API void retro_set_controller_port_device(unsigned port, unsigned device)
 
 RETRO_API void retro_reset()
 {
-	program->emulator->power();
+	program->emulator->reset();
 }
 
 RETRO_API void retro_run()
